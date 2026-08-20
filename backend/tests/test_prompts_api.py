@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import httpx
@@ -41,6 +42,15 @@ class TestCreatePrompt:
     async def test_variables_derived_from_template(self, client: httpx.AsyncClient) -> None:
         data = await _create_prompt(client)
         assert set(data["version"]["variables"]) == {"ticket_text", "tier"}
+
+    async def test_updated_at_present(self, client: httpx.AsyncClient) -> None:
+        data = await _create_prompt(client)
+        prompt = data["prompt"]
+        # POST /api/prompts creates the prompt row *and* version 1 -- the latter bumps
+        # updated_at (see TestPromptCrud.test_new_version_bumps_parent_prompt_updated_at
+        # in test_db.py), so updated_at >= created_at rather than strictly equal here.
+        assert "updated_at" in prompt
+        assert prompt["updated_at"] >= prompt["created_at"]
 
     async def test_missing_required_field_is_422(self, client: httpx.AsyncClient) -> None:
         resp = await client.post("/api/prompts", json={"name": "no template"})
@@ -83,6 +93,15 @@ class TestPatchDeletePrompt:
         resp = await client.patch("/api/prompts/999999", json={"name": "x"})
         assert resp.status_code == 404
 
+    async def test_patch_bumps_updated_at(self, client: httpx.AsyncClient) -> None:
+        created = await _create_prompt(client)
+        prompt_id = created["prompt"]["id"]
+        original_updated_at = created["prompt"]["updated_at"]
+        time.sleep(0.01)
+        resp = await client.patch(f"/api/prompts/{prompt_id}", json={"description": "revised"})
+        assert resp.status_code == 200
+        assert resp.json()["updated_at"] > original_updated_at
+
     async def test_delete_prompt(self, client: httpx.AsyncClient) -> None:
         created = await _create_prompt(client)
         prompt_id = created["prompt"]["id"]
@@ -113,6 +132,17 @@ class TestVersions:
             f"/api/prompts/{prompt_id}/versions", json={"template": "Third {{y}} {{z}}"}
         )
         assert resp3.json()["version_no"] == 3
+
+    async def test_new_version_bumps_parent_prompt_updated_at(self, client: httpx.AsyncClient) -> None:
+        created = await _create_prompt(client)
+        prompt_id = created["prompt"]["id"]
+        original_updated_at = created["prompt"]["updated_at"]
+        time.sleep(0.01)
+        resp = await client.post(f"/api/prompts/{prompt_id}/versions", json={"template": "v2 {{x}}"})
+        assert resp.status_code == 201
+
+        refreshed = await client.get(f"/api/prompts/{prompt_id}")
+        assert refreshed.json()["prompt"]["updated_at"] > original_updated_at
 
     async def test_versions_are_immutable_no_update_endpoint(self, client: httpx.AsyncClient) -> None:
         created = await _create_prompt(client)

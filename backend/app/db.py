@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS prompt (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS prompt_version (
@@ -200,10 +201,34 @@ def connection(*, write: bool = False) -> Iterator[sqlite3.Connection]:
             conn.close()
 
 
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply idempotent, additive schema migrations for databases created before a column
+    existed.
+
+    ``CREATE TABLE IF NOT EXISTS`` (see :data:`SCHEMA`) only creates a table the first
+    time -- it does NOT alter an existing table's columns. A returning user with a real
+    ``promptlab.db`` predating a schema change would otherwise hit "no such column"
+    errors. Each migration here is guarded by a ``PRAGMA table_info`` check so it is
+    a no-op (and safe to re-run) once applied.
+    """
+    prompt_columns = _column_names(conn, "prompt")
+    if "updated_at" not in prompt_columns:
+        conn.execute("ALTER TABLE prompt ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+        # Backfill existing rows so `updated_at` reflects reality instead of ''
+        # (which would otherwise sort before every real timestamp).
+        conn.execute("UPDATE prompt SET updated_at = created_at WHERE updated_at = ''")
+
+
 def init_db() -> None:
-    """Create all tables (and indexes) if they do not already exist. Safe to call repeatedly."""
+    """Create all tables (and indexes) if they do not already exist, then apply any
+    pending additive migrations. Safe to call repeatedly."""
     with connection(write=True) as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
 
 
 # --------------------------------------------------------------------------

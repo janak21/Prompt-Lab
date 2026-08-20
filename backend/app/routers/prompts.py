@@ -40,6 +40,7 @@ def _prompt_response(row: dict[str, Any]) -> Prompt:
         name=row["name"],
         description=row["description"],
         created_at=row["created_at"],
+        updated_at=row["updated_at"],
         version_count=len(versions),
         latest_version_no=versions[-1]["version_no"] if versions else None,
     )
