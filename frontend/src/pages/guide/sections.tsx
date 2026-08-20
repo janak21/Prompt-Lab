@@ -9,7 +9,17 @@
 
 import type { ReactNode } from 'react'
 import { CategoryBadge } from '@/components/datasets/CategoryBadge'
-import { Callout, Example, ExampleRow, Lead, LI, OL, P, ProseTable, Section, Strong, SubSection, Term, UL, AppLink } from './prose'
+import { Callout, Example, ExampleRow, Lead, LI, OL, P, ProseTable, Section, Strong, SubSection, Term, UL, AppLink, ExternalLink } from './prose'
+
+// Source pages this section is grounded in -- kept as named constants so every inline
+// citation below points at the same URL rather than a hand-retyped copy that could
+// drift. These are the exact pages fetched while writing this section (2026-08-20);
+// see the Sources callout at the top of the section for the caveat that they move.
+const DOCS_BEST_PRACTICES = 'https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices'
+const DOCS_PROMPT_ENGINEERING_OVERVIEW = 'https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview'
+const DOCS_DEVELOP_TESTS = 'https://platform.claude.com/docs/en/test-and-evaluate/develop-tests'
+const DOCS_OPUS_5 = 'https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5'
+const DOCS_SONNET_5 = 'https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5'
 
 export interface GuideSection {
   id: string
@@ -458,6 +468,22 @@ Customer tier: {{customer_tier}}`}</span>
           not general advice.
         </Lead>
 
+        <Callout tone="info" title="Sources">
+          <p>
+            Written against these pages on 2026-08-20: <ExternalLink href={DOCS_BEST_PRACTICES}>Prompting best practices</ExternalLink> (the
+            living reference this section draws from most), <ExternalLink href={DOCS_PROMPT_ENGINEERING_OVERVIEW}>Prompt engineering overview</ExternalLink>,{' '}
+            <ExternalLink href={DOCS_DEVELOP_TESTS}>Define success criteria and build evaluations</ExternalLink>, and the
+            model-specific pages for <ExternalLink href={DOCS_OPUS_5}>Claude Opus 5</ExternalLink> and{' '}
+            <ExternalLink href={DOCS_SONNET_5}>Claude Sonnet 5</ExternalLink>.
+          </p>
+          <p>
+            Anthropic&rsquo;s docs move — the per-technique pages this reference used to be split across have since
+            consolidated into the single best-practices page above, and <Term>docs.anthropic.com</Term> now
+            redirects to <Term>platform.claude.com</Term>. If this section and the live pages disagree, the live
+            pages are correct; treat what&rsquo;s below as a snapshot, not a permanent transcription.
+          </p>
+        </Callout>
+
         <SubSection id="wbp-anatomy" title="The anatomy of a production prompt">
           <P>
             PromptLab splits a prompt into a <Term>system_prompt</Term> field and a <Term>template</Term> (the user
@@ -500,6 +526,9 @@ Customer tier: {{customer_tier}}`}</span>
             of every template. Everything else — instructions, examples, the data, the format spec — is the user
             turn, in that order, with long data first and the actual ask last.
           </P>
+          <P>
+            More: <ExternalLink href={DOCS_BEST_PRACTICES}>Give Claude a role &amp; Long context prompting, in Prompting best practices</ExternalLink>.
+          </P>
         </SubSection>
 
         <SubSection id="wbp-tags" title="Structure & XML tags">
@@ -515,6 +544,9 @@ Customer tier: {{customer_tier}}`}</span>
             is tagged, reference it by name in your instructions — &ldquo;summarize the report in{' '}
             <Term>{'<context>'}</Term>&rdquo; is unambiguous in a way that &ldquo;summarize the above&rdquo; is not
             once a prompt has multiple sections.
+          </P>
+          <P>
+            More: <ExternalLink href={DOCS_BEST_PRACTICES}>Structure prompts with XML tags, in Prompting best practices</ExternalLink>.
           </P>
         </SubSection>
 
@@ -538,6 +570,9 @@ Customer tier: {{customer_tier}}`}</span>
             response you want, and an injection attempt with the &ldquo;politely decline, continue the real
             task&rdquo; response you want. That is diverse in exactly the direction your dataset already told you
             was weak.
+          </P>
+          <P>
+            More: <ExternalLink href={DOCS_BEST_PRACTICES}>Use examples effectively, in Prompting best practices</ExternalLink>.
           </P>
         </SubSection>
 
@@ -569,6 +604,11 @@ Customer tier: {{customer_tier}}`}</span>
             fix there is to leave thinking enabled at a low effort level rather than disabling it and prompting
             around the gap.
           </P>
+          <P>
+            More: <ExternalLink href={DOCS_BEST_PRACTICES}>Thinking and reasoning, in Prompting best practices</ExternalLink>,{' '}
+            <ExternalLink href={DOCS_OPUS_5}>Running with thinking disabled, in Prompting Claude Opus 5</ExternalLink>, and{' '}
+            <ExternalLink href={DOCS_SONNET_5}>Calibrating effort and thinking depth, in Prompting Claude Sonnet 5</ExternalLink>.
+          </P>
         </SubSection>
 
         <SubSection id="wbp-output" title="Output control">
@@ -590,6 +630,9 @@ Customer tier: {{customer_tier}}`}</span>
             a <Term>json_schema</Term> grader (see Graders above) so an eval run tells you directly whether the ask
             is landing, instead of guessing from spot-checks.
           </Callout>
+          <P>
+            More: <ExternalLink href={DOCS_BEST_PRACTICES}>Control the format of responses & Migrating away from prefilled responses, in Prompting best practices</ExternalLink>.
+          </P>
         </SubSection>
 
         <SubSection id="wbp-criteria" title="Writing testable success criteria">
@@ -612,6 +655,9 @@ Customer tier: {{customer_tier}}`}</span>
             are too vague to grade against — see &ldquo;where do I look first&rdquo; below before assuming the fix
             belongs in the prompt template.
           </Callout>
+          <P>
+            More: <ExternalLink href={DOCS_DEVELOP_TESTS}>Define success criteria and build evaluations</ExternalLink>.
+          </P>
         </SubSection>
 
         <SubSection id="wbp-diagnostic" title="Category → fix table">

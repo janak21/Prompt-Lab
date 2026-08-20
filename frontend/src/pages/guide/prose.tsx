@@ -66,6 +66,24 @@ export function AppLink({ to, children }: { to: string; children: ReactNode }) {
   )
 }
 
+/** A link out to a real URL (Anthropic's docs, primarily) -- opens in a new tab, with a
+ * small glyph so it reads as "leaves the app" rather than looking like an AppLink. */
+export function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-medium text-[var(--accent-10)] underline decoration-[var(--accent-a-40)] underline-offset-2 transition-colors duration-100 hover:decoration-[var(--accent-10)]"
+    >
+      {children}
+      <span aria-hidden="true" className="ml-0.5 inline-block">
+        ↗
+      </span>
+    </a>
+  )
+}
+
 type CalloutTone = 'info' | 'warning'
 
 const CALLOUT_TONE: Record<CalloutTone, string> = {
