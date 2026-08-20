@@ -1,11 +1,8 @@
-"""Seed a starting example drawn from the user's own source notebook.
+"""Seed a starting example so a fresh clone has something useful to run immediately.
 
-The four ``001_prompt_evals*.ipynb`` notebooks in the parent directory (see
-``docs/PLAN.md``) are what PromptLab grew out of: a single prompt that generates
+Creates a real PromptLab prompt + dataset + grader set: a single prompt that generates
 Python/JSON/regex for AWS tasks, graded by an LLM judge ("expert AWS code reviewer")
-averaged with a deterministic syntax check. This module recreates that as a real
-PromptLab prompt + dataset + grader set, so a fresh clone has something useful to run
-immediately instead of starting from a blank slate.
+averaged with a deterministic syntax check.
 
 Run it directly:
 
@@ -27,11 +24,8 @@ from typing import Any
 from . import models
 
 PROMPT_NAME = "AWS Code Generator"
-DATASET_NAME = "AWS Tasks (from dataset.json)"
+DATASET_NAME = "AWS Tasks"
 
-# Ported from the notebook's `run_prompt` (see
-# ../../../001_prompt_evals_complete.ipynb, the cell defining `run_prompt`), converted
-# from an f-string embedding `test_case["task"]` to the `{{task}}` variable convention.
 PROMPT_TEMPLATE = """Please solve the following task:
 
 {{task}}
@@ -40,9 +34,8 @@ PROMPT_TEMPLATE = """Please solve the following task:
 * Do not add any comments or commentary or explanation
 """
 
-# The notebook's `grade_by_model` rubric ("You are an expert AWS code reviewer...")
-# reworded as a grader rubric. `use_solution_criteria=True` grounds the judge in each
-# case's `solution_criteria`, mirroring the notebook's `<criteria>` block.
+# `use_solution_criteria=True` grounds the judge in each case's `solution_criteria`
+# below, rather than judging correctness from the rubric text alone.
 LLM_JUDGE_RUBRIC = """You are an expert AWS code reviewer. Evaluate the solution below for
 correctness, completeness, and idiomatic quality as Python, JSON, or a regular
 expression, whichever the task calls for.
@@ -54,8 +47,9 @@ Consider:
 - Would it work correctly on realistic AWS inputs, including edge cases?
 """
 
-# The three AWS tasks from ../../../dataset.json, with `expected_format` and
-# `solution_criteria` added -- the source file has only a bare `task` string per case.
+# Three representative AWS tasks, one per output format PromptLab's `code_syntax`
+# grader understands (python / json / regex), each with a specific, checkable
+# `solution_criteria` for the llm_judge grader to be graded against.
 SEED_CASES: list[dict[str, Any]] = [
     {
         "task": (
@@ -131,21 +125,18 @@ def seed() -> dict[str, Any]:
 
     prompt = models.create_prompt(
         PROMPT_NAME,
-        description=(
-            "Generates Python, JSON, or Regex for AWS tasks. Seeded from the original "
-            "001_prompt_evals_complete.ipynb notebook this project grew out of."
-        ),
+        description="Generates Python, JSON, or Regex for AWS tasks.",
     )
     version = models.create_prompt_version(
         prompt["id"],
         PROMPT_TEMPLATE,
         model="claude-haiku-4-5",
-        notes="Seeded from the notebook's run_prompt.",
+        notes="Seeded starter example.",
     )
 
     dataset = models.create_dataset(
         DATASET_NAME,
-        description="The 3 AWS tasks from the original dataset.json, with expected_format and solution_criteria added.",
+        description="Three AWS tasks covering Python, JSON, and regex output formats.",
         source="imported",
     )
     cases = [

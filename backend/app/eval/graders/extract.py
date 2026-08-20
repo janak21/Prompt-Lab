@@ -2,12 +2,12 @@
 
 Why this exists
 ---------------
-The source notebooks got un-fenced code out of the model by prefilling an assistant turn
+An older technique got un-fenced code out of the model by prefilling an assistant turn
 with ```` ```code ```` and stopping at the closing fence, so the fence never appeared in
-the output. That technique returns HTTP 400 on Claude 5 models (assistant prefill was
-removed), so **markdown-fenced output is now the normal case** for any prompt that asks
-for code. A grader that feeds ```` ```json\\n{...} ```` straight into ``json.loads`` scores
-a perfectly correct answer 0.
+the output. That technique returns HTTP 400 on Claude 5 models (assistant prefill is
+unsupported there), so **markdown-fenced output is the normal case** for any prompt
+that asks for code. A grader that feeds ```` ```json\\n{...} ```` straight into
+``json.loads`` scores a perfectly correct answer 0.
 
 Fence stripping is therefore **unconditional**, not a per-grader flag. Rationale: a fence
 is a transport artifact of how chat models emit code, not part of the answer. Making it

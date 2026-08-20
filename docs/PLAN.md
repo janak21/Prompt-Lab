@@ -5,9 +5,8 @@ generate or import a test dataset (including deliberately adversarial edge cases
 with a configurable mix of LLM-judge and deterministic code graders, see scores and failures, and
 A/B two prompt versions against the same dataset to prove one is actually better.
 
-Base: the four `001_prompt_evals*.ipynb` notebooks in the parent directory. Their pipeline
-(generate dataset -> run prompt -> model grade + syntax grade -> average) is the seed; everything
-below is that loop made persistent, concurrent, configurable, and visual.
+Base pipeline: generate dataset -> run prompt -> model grade + syntax grade -> average. Everything
+below makes that loop persistent, concurrent, configurable, and visual.
 
 ---
 
@@ -112,7 +111,7 @@ and frontend can be built in parallel without drifting. Then:
 | P1 Foundation | 1 | scaffold, uv/pyproject, config + key resolution, db + models, LLM client (retries, token accounting, cost), templating engine, pytest harness with a mocked LLM |
 | P2 (parallel) | 3 | **a)** eval core: graders, scoring, concurrent runner + SSE, generation (standard/adversarial), CSV/JSON/JSONL importers. **b)** CRUD API: all routers per contract. **c)** frontend scaffold: Vite/React/TS/Tailwind, design tokens, base components, typed API client, mock-data mode |
 | P3 (parallel) | 2 | **a)** Prompts + Datasets + Graders pages. **b)** Run + live progress + Results + Compare pages |
-| P4 Integration | 1 | wire frontend to real API, `run.sh`, seed the existing `dataset.json` + notebook prompt as a starter example, README, end-to-end smoke test against the live API |
+| P4 Integration | 1 | wire frontend to real API, `run.sh`, seed a starter example prompt + dataset, README, end-to-end smoke test against the live API |
 | P5 Review | me + reviewers | code review, a real eval run end to end, fix pass |
 
 Every phase gate is mine: I review the diff against the contract before the next phase starts.
