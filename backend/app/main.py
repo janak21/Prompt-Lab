@@ -115,12 +115,12 @@ if ASSETS_DIR.is_dir():
 @app.get("/{full_path:path}", response_model=None)
 def spa_fallback(full_path: str) -> FileResponse | JSONResponse:
     """Serve the built SPA's ``index.html`` for any non-API path (client-side routing),
-    EXCEPT for a handful of top-level static assets (``favicon.svg``, ``icons.svg``,
+    EXCEPT for a handful of top-level static assets (``favicon.ico``, the logo PNGs,
     ``robots.txt``, etc.) that ship directly in ``STATIC_DIR`` rather than under
     ``STATIC_DIR/assets`` (which is served by the ``/assets`` mount above and never
     reaches this handler at all).
 
-    Without this check, a request for e.g. ``/favicon.svg`` would fall through to the
+    Without this check, a request for e.g. ``/favicon.ico`` would fall through to the
     SPA-fallback branch below and get a 200 response containing ``index.html`` -- which
     is worse than a 404, since it looks superficially fine (the browser gets *a*
     document) but silently serves the wrong content instead of the actual icon.
@@ -133,7 +133,7 @@ def spa_fallback(full_path: str) -> FileResponse | JSONResponse:
         return JSONResponse({"detail": "Not Found"}, status_code=404)
 
     # Serve a real top-level static file directly if one exists at this path (e.g.
-    # favicon.svg, icons.svg) -- guard against path traversal by requiring the
+    # favicon.ico, logo-*.png) -- guard against path traversal by requiring the
     # resolved path to still live inside STATIC_DIR.
     if STATIC_DIR.is_dir() and full_path:
         candidate = (STATIC_DIR / full_path).resolve()

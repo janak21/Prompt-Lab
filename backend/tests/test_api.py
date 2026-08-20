@@ -182,19 +182,21 @@ class TestStaticAssets:
     async def test_top_level_favicon_and_icons_are_not_swallowed_by_spa_fallback(
         self, client: httpx.AsyncClient
     ) -> None:
-        # favicon.svg / icons.svg live at STATIC_DIR's top level (not under assets/).
-        # Before the fix, these fell through to the SPA catch-all and got a 200
-        # containing index.html -- superficially fine, but silently wrong content.
+        # favicon.ico and the logo PNGs live at STATIC_DIR's top level (not under
+        # assets/). Before the fix, these fell through to the SPA catch-all and got a
+        # 200 containing index.html -- superficially fine, but silently wrong content.
         static_dir = Path(main.STATIC_DIR)
-        if not (static_dir / "favicon.svg").is_file():
-            pytest.skip("frontend not built -- no favicon.svg to verify against")
+        if not (static_dir / "favicon.ico").is_file():
+            pytest.skip("frontend not built -- no favicon.ico to verify against")
 
-        favicon_resp = await client.get("/favicon.svg")
+        favicon_resp = await client.get("/favicon.ico")
         assert favicon_resp.status_code == 200
-        assert favicon_resp.content == (static_dir / "favicon.svg").read_bytes()
+        assert favicon_resp.content == (static_dir / "favicon.ico").read_bytes()
         assert "html" not in favicon_resp.headers.get("content-type", "")
 
-        if (static_dir / "icons.svg").is_file():
-            icons_resp = await client.get("/icons.svg")
-            assert icons_resp.status_code == 200
-            assert icons_resp.content == (static_dir / "icons.svg").read_bytes()
+        for name in ("logo-32.png", "logo-180.png"):
+            if (static_dir / name).is_file():
+                resp = await client.get(f"/{name}")
+                assert resp.status_code == 200
+                assert resp.content == (static_dir / name).read_bytes()
+                assert "html" not in resp.headers.get("content-type", "")

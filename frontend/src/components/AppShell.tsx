@@ -57,8 +57,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-full bg-[var(--surface-0)]">
       <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-1)]">
         <div className="flex h-12 items-center gap-2 border-b border-[var(--border-subtle)] px-4">
+          {/* Served at 180px and downscaled so the mark stays crisp on high-DPI displays. */}
           <img
-            src="/logo-64.png"
+            src="/logo-180.png"
             alt=""
             width={20}
             height={20}
