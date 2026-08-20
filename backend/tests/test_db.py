@@ -4,10 +4,13 @@ FK cascades, and JSON column helpers."""
 from __future__ import annotations
 
 import sqlite3
+import time
+from pathlib import Path
 
 import pytest
 
 from backend.app import db, models
+from backend.app.config import settings
 
 pytestmark = pytest.mark.usefixtures("tmp_db")
 
@@ -77,6 +80,22 @@ class TestPromptCrud:
         assert updated is not None
         assert updated["name"] == "renamed"
 
+    def test_create_sets_updated_at_equal_to_created_at(self) -> None:
+        p = models.create_prompt("fresh")
+        assert p["updated_at"] == p["created_at"]
+
+    def test_update_bumps_updated_at(self) -> None:
+        p = models.create_prompt("orig")
+        time.sleep(0.01)
+        updated = models.update_prompt(p["id"], description="new desc")
+        assert updated["updated_at"] > p["updated_at"]
+        assert updated["created_at"] == p["created_at"]  # created_at is immutable
+
+    def test_update_with_no_fields_does_not_bump_updated_at(self) -> None:
+        p = models.create_prompt("orig")
+        unchanged = models.update_prompt(p["id"])
+        assert unchanged["updated_at"] == p["updated_at"]
+
     def test_delete(self) -> None:
         p = models.create_prompt("to delete")
         models.delete_prompt(p["id"])
@@ -126,6 +145,94 @@ class TestPromptVersionCrud:
     def test_latest_none_when_no_versions(self) -> None:
         p = models.create_prompt("no versions")
         assert models.latest_prompt_version(p["id"]) is None
+
+    def test_new_version_bumps_parent_prompt_updated_at(self) -> None:
+        p = models.create_prompt("bump me")
+        time.sleep(0.01)
+        models.create_prompt_version(p["id"], "t1")
+        refreshed = models.get_prompt(p["id"])
+        assert refreshed["updated_at"] > p["updated_at"]
+        assert refreshed["created_at"] == p["created_at"]
+
+
+class TestPromptUpdatedAtMigration:
+    """Gap 1: a real user's pre-existing ``promptlab.db`` was created before the
+    ``updated_at`` column existed. ``CREATE TABLE IF NOT EXISTS`` alone would leave it
+    missing and every prompt read/write would start raising "no such column:
+    updated_at". :func:`db.init_db` must upgrade such a database in place, idempotently.
+    """
+
+    def test_migrates_pre_existing_db_missing_updated_at(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        db_path = tmp_path / "legacy.db"
+        monkeypatch.setattr(settings, "promptlab_db", str(db_path))
+
+        # Simulate a database created by an older version of the app: the `prompt`
+        # table exists but predates the `updated_at` column, and already has data.
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            """CREATE TABLE prompt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        conn.execute(
+            "INSERT INTO prompt (name, description, created_at) VALUES (?, ?, ?)",
+            ("Legacy prompt", "predates the column", "2024-01-01T00:00:00+00:00"),
+        )
+        conn.commit()
+        conn.close()
+
+        # Starting the app runs init_db(), which must upgrade the existing table
+        # in place rather than erroring or silently no-op'ing via IF NOT EXISTS.
+        db.init_db()
+
+        with db.connection() as new_conn:
+            row = new_conn.execute("SELECT * FROM prompt WHERE name = 'Legacy prompt'").fetchone()
+        assert row is not None
+        assert "updated_at" in row
+        # Backfilled to created_at rather than left blank, so the returning user's
+        # existing prompts don't all show up as "just updated" or sort incorrectly.
+        assert row["updated_at"] == "2024-01-01T00:00:00+00:00"
+
+        # New prompts created after the migration work normally too.
+        new_prompt = models.create_prompt("Post-migration prompt")
+        assert new_prompt["updated_at"] == new_prompt["created_at"]
+
+    def test_migration_is_idempotent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        db_path = tmp_path / "legacy2.db"
+        monkeypatch.setattr(settings, "promptlab_db", str(db_path))
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            """CREATE TABLE prompt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        conn.commit()
+        conn.close()
+
+        db.init_db()
+        db.init_db()  # running the migration twice must not raise or duplicate the column
+
+        with db.connection() as new_conn:
+            cols = [r["name"] for r in new_conn.execute("PRAGMA table_info(prompt)").fetchall()]
+        assert cols.count("updated_at") == 1
+
+    def test_fresh_db_already_has_updated_at(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A brand-new database (no legacy table at all) gets the column straight from
+        the CREATE TABLE, with the migration being a no-op."""
+        db_path = tmp_path / "fresh.db"
+        monkeypatch.setattr(settings, "promptlab_db", str(db_path))
+        db.init_db()
+        with db.connection() as conn:
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(prompt)").fetchall()}
+        assert "updated_at" in cols
 
 
 class TestDatasetCrud:

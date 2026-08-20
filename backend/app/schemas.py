@@ -45,6 +45,7 @@ class Prompt(BaseModel):
     name: str
     description: str | None = None
     created_at: str
+    updated_at: str
     version_count: int
     latest_version_no: int | None = None
 
@@ -516,7 +517,8 @@ class ImportPreviewResponse(BaseModel):
 
 
 class ImportPayload(BaseModel):
-    name: str
+    dataset_id: int | None = None
+    name: str | None = None
     mapping: dict[str, str]
     solution_criteria_column: str | None = None
     category_column: str | None = None

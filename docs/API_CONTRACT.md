@@ -10,7 +10,7 @@ Field naming is `snake_case` everywhere, request and response. Timestamps ISO-86
 ## Shared shapes
 
 ```ts
-Prompt        = { id, name, description, created_at, version_count, latest_version_no }
+Prompt        = { id, name, description, created_at, updated_at, version_count, latest_version_no }
 PromptVersion = { id, prompt_id, version_no, template, system_prompt, model, temperature,
                   max_tokens, notes, created_at, variables: string[] }
 Grader        = { id, prompt_id, type, name, weight, config: object, enabled: bool, position }
@@ -55,10 +55,10 @@ union of `inputs` keys for a dataset.
 - `POST   /api/prompts` body `{name, description?, template, system_prompt?, model?, temperature?, max_tokens?}`
   -> `{prompt: Prompt, version: PromptVersion}`  (creates version 1)
 - `GET    /api/prompts/{id}` -> `{prompt: Prompt, versions: PromptVersion[], graders: Grader[]}`
-- `PATCH  /api/prompts/{id}` body `{name?, description?}` -> `Prompt`
+- `PATCH  /api/prompts/{id}` body `{name?, description?}` -> `Prompt` (bumps `updated_at` when a field actually changes)
 - `DELETE /api/prompts/{id}` -> 204
 - `POST   /api/prompts/{id}/versions` body `{template, system_prompt?, model?, temperature?, max_tokens?, notes?}`
-  -> `PromptVersion` (version_no auto-increments)
+  -> `PromptVersion` (version_no auto-increments; also bumps the parent `Prompt.updated_at`)
 - `GET    /api/prompt-versions/{id}` -> `PromptVersion`
 - `POST   /api/prompts/extract-variables` body `{template}` -> `{variables: string[]}`
 
@@ -114,10 +114,16 @@ proportionally to satisfied constraints. `budget` scores 10 if all set ceilings 
   `{ format: "csv"|"json"|"jsonl", columns: string[], rows: object[] /*first 10*/, total_rows }`
 - `POST /api/datasets/import` multipart `file` + form field `payload` (JSON string):
   ```ts
-  { name: string, mapping: Record<string,string>,  // column -> variable name
+  { dataset_id?: number,       // append to existing; omit to create new
+    name?: string,             // required when dataset_id omitted
+    mapping: Record<string,string>,  // column -> variable name
     solution_criteria_column?: string, category_column?: string, expected_format_column?: string }
   ```
-  -> `{ dataset: Dataset, cases: TestCase[] }`
+  -> `{ dataset: Dataset, cases: TestCase[] }`. 404 if `dataset_id` doesn't exist; 422 if
+  both `dataset_id` and `name` are omitted. Appending does not require the imported rows'
+  mapped variable names to match the existing cases' keys -- `Dataset.variables` is the
+  union across all cases, and a real mismatch against a prompt's template surfaces as a
+  422 from the run pre-flight check instead (see `POST /api/runs` below).
 
 ## Runs
 - `POST /api/runs` body `{prompt_version_id, dataset_id, model?, temperature?, max_tokens?,

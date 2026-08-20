@@ -1,8 +1,10 @@
 # PromptLab — Data Model (FROZEN)
 
 SQLite, file at `promptlab/promptlab.db` (override with `PROMPTLAB_DB`). Created on startup via
-`CREATE TABLE IF NOT EXISTS`. All timestamps are ISO-8601 UTC strings. All `*_json` columns are TEXT
-holding JSON. Foreign keys ON, cascading deletes as noted.
+`CREATE TABLE IF NOT EXISTS`, followed by a set of idempotent, additive migrations (each guarded
+by a `PRAGMA table_info` column check) that upgrade a pre-existing database created before a
+column existed -- see `db._migrate`. All timestamps are ISO-8601 UTC strings. All `*_json` columns
+are TEXT holding JSON. Foreign keys ON, cascading deletes as noted.
 
 ## prompt
 | col | type | notes |
@@ -11,6 +13,7 @@ holding JSON. Foreign keys ON, cascading deletes as noted.
 | name | TEXT NOT NULL | |
 | description | TEXT | |
 | created_at | TEXT NOT NULL | |
+| updated_at | TEXT NOT NULL | bumped when a new `prompt_version` is created for this prompt, and when `name`/`description` is patched. On databases created before this column existed, it is backfilled to `created_at` by the startup migration. |
 
 ## prompt_version  — IMMUTABLE, never UPDATE
 | id | INTEGER PK |

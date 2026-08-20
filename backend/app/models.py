@@ -31,8 +31,8 @@ def create_prompt(name: str, description: str | None = None) -> dict[str, Any]:
     created_at = utcnow_iso()
     with db.connection(write=True) as conn:
         cur = conn.execute(
-            "INSERT INTO prompt (name, description, created_at) VALUES (?, ?, ?)",
-            (name, description, created_at),
+            "INSERT INTO prompt (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (name, description, created_at, created_at),
         )
         row = conn.execute("SELECT * FROM prompt WHERE id = ?", (cur.lastrowid,)).fetchone()
         return db.row_to_dict(row)  # type: ignore[return-value]
@@ -53,7 +53,10 @@ def list_prompts() -> list[dict[str, Any]]:
 
 
 def update_prompt(prompt_id: int, *, name: str | None = None, description: str | None = None) -> dict[str, Any] | None:
-    """Patch ``name``/``description`` on a prompt (only fields explicitly passed are changed)."""
+    """Patch ``name``/``description`` on a prompt (only fields explicitly passed are changed).
+
+    Bumps ``updated_at`` whenever a field actually changes.
+    """
     fields: list[str] = []
     values: list[Any] = []
     if name is not None:
@@ -64,6 +67,8 @@ def update_prompt(prompt_id: int, *, name: str | None = None, description: str |
         values.append(description)
     if not fields:
         return get_prompt(prompt_id)
+    fields.append("updated_at = ?")
+    values.append(utcnow_iso())
     values.append(prompt_id)
     with db.connection(write=True) as conn:
         conn.execute(f"UPDATE prompt SET {', '.join(fields)} WHERE id = ?", values)
@@ -91,7 +96,12 @@ def create_prompt_version(
     max_tokens: int | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
-    """Insert the next version for a prompt (auto-incrementing ``version_no``)."""
+    """Insert the next version for a prompt (auto-incrementing ``version_no``).
+
+    Also bumps the parent prompt's ``updated_at`` -- this is the primary way a prompt's
+    ``updated_at`` changes, since the whole workflow is iterating on a prompt via new
+    versions.
+    """
     created_at = utcnow_iso()
     with db.connection(write=True) as conn:
         row = conn.execute(
@@ -106,6 +116,7 @@ def create_prompt_version(
             (prompt_id, next_version, template, system_prompt, model, temperature, max_tokens, notes, created_at),
         )
         new_id = cur.lastrowid
+        conn.execute("UPDATE prompt SET updated_at = ? WHERE id = ?", (created_at, prompt_id))
     return get_prompt_version(new_id)  # type: ignore[arg-type,return-value]
 
 
