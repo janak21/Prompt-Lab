@@ -248,7 +248,18 @@ async def import_preview(file: UploadFile = File(...)) -> ImportPreviewResponse:
 
 @router.post("/api/datasets/import", response_model=ImportResponse)
 async def import_dataset(file: UploadFile = File(...), payload: str = Form(...)) -> ImportResponse:
-    """Commit an import: apply the column -> variable mapping and persist the dataset."""
+    """Commit an import: apply the column -> variable mapping and persist the dataset.
+
+    Creates a new dataset (``name`` required) or appends to an existing one
+    (``dataset_id``) -- mirrors ``POST /api/datasets/generate``. Appending does not
+    require the imported cases' variable keys to match the existing cases' keys:
+    ``Dataset.variables`` is already the union of keys across all of a dataset's cases
+    (see module docstring), and a real mismatch is caught with a clear error at run
+    time by the pre-flight template-variable check in ``routers/runs.py`` -- rejecting
+    at import time would block the exact "collect one production failure at a time"
+    workflow this endpoint exists for, since a single odd case would otherwise fail the
+    whole append.
+    """
     import json as _json
 
     try:
@@ -259,6 +270,13 @@ async def import_dataset(file: UploadFile = File(...), payload: str = Form(...))
         parsed_payload = ImportPayload.model_validate(payload_dict)
     except ValidationError as exc:
         raise http_422_from_validation_error(exc) from exc
+
+    if parsed_payload.dataset_id is not None:
+        dataset_row = _get_dataset_or_404(parsed_payload.dataset_id)
+    else:
+        if not parsed_payload.name:
+            raise HTTPException(status_code=422, detail="`name` is required when `dataset_id` is omitted")
+        dataset_row = models.create_dataset(parsed_payload.name, source="imported")
 
     try:
         content = await importers.read_capped(file)
@@ -277,7 +295,6 @@ async def import_dataset(file: UploadFile = File(...), payload: str = Form(...))
         expected_format_column=parsed_payload.expected_format_column,
     )
 
-    dataset_row = models.create_dataset(parsed_payload.name, source="imported")
     case_rows = [
         models.create_test_case(
             dataset_row["id"],

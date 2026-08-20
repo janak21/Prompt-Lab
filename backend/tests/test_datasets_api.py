@@ -316,6 +316,64 @@ class TestImport:
         assert body["cases"][0]["inputs"] == {"q": "What is 2+2?", "a": "4"}
         assert body["cases"][0]["solution_criteria"] == "easy"
 
+    async def test_commit_appends_to_existing_dataset(self, client: httpx.AsyncClient) -> None:
+        created = await client.post("/api/datasets", json={"name": "Existing"})
+        ds_id = created.json()["id"]
+        await client.post(f"/api/datasets/{ds_id}/cases", json={"inputs": {"q": "already here"}})
+
+        content = b"question,answer\nWhat is 2+2?,4\n"
+        files = {"file": ("cases.csv", io.BytesIO(content), "text/csv")}
+        payload = {"dataset_id": ds_id, "mapping": {"question": "q", "answer": "a"}}
+        resp = await client.post(
+            "/api/datasets/import", files=files, data={"payload": json.dumps(payload)}
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["dataset"]["id"] == ds_id
+        assert body["dataset"]["case_count"] == 2
+        assert len(body["cases"]) == 1
+        assert body["cases"][0]["inputs"] == {"q": "What is 2+2?", "a": "4"}
+
+    async def test_commit_appends_even_with_mismatched_variable_keys(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        """Gap 2 decision: appending is allowed even when the imported cases' variable
+        keys differ from the dataset's existing cases. Dataset.variables is already a
+        union across cases (existing behavior), and a genuine mismatch against a
+        prompt's template is caught with a clear error by the run pre-flight check
+        (routers/runs.py), not by import."""
+        created = await client.post("/api/datasets", json={"name": "Existing"})
+        ds_id = created.json()["id"]
+        await client.post(f"/api/datasets/{ds_id}/cases", json={"inputs": {"x": "1"}})
+
+        content = b"other_col\nsome value\n"
+        files = {"file": ("cases.csv", io.BytesIO(content), "text/csv")}
+        payload = {"dataset_id": ds_id, "mapping": {"other_col": "y"}}
+        resp = await client.post(
+            "/api/datasets/import", files=files, data={"payload": json.dumps(payload)}
+        )
+        assert resp.status_code == 200, resp.text
+        variables = set(resp.json()["dataset"]["variables"])
+        assert variables == {"x", "y"}
+
+    async def test_commit_requires_name_when_no_dataset_id(self, client: httpx.AsyncClient) -> None:
+        content = b"question,answer\nWhat is 2+2?,4\n"
+        files = {"file": ("cases.csv", io.BytesIO(content), "text/csv")}
+        payload = {"mapping": {"question": "q", "answer": "a"}}
+        resp = await client.post(
+            "/api/datasets/import", files=files, data={"payload": json.dumps(payload)}
+        )
+        assert resp.status_code == 422
+
+    async def test_commit_missing_dataset_id_404(self, client: httpx.AsyncClient) -> None:
+        content = b"question,answer\nWhat is 2+2?,4\n"
+        files = {"file": ("cases.csv", io.BytesIO(content), "text/csv")}
+        payload = {"dataset_id": 999999, "mapping": {"question": "q", "answer": "a"}}
+        resp = await client.post(
+            "/api/datasets/import", files=files, data={"payload": json.dumps(payload)}
+        )
+        assert resp.status_code == 404
+
     async def test_commit_bad_payload_json_422(self, client: httpx.AsyncClient) -> None:
         content = b"a,b\n1,2\n"
         files = {"file": ("cases.csv", io.BytesIO(content), "text/csv")}
