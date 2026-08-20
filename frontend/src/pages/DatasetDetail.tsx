@@ -118,10 +118,11 @@ export function DatasetDetailPage() {
       <ImportDatasetDialog
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        onImported={({ dataset: d }) => {
+        datasetId={dataset.id}
+        onImported={({ dataset: d, cases: newCases }) => {
+          setDataset(d)
+          syncMeta([...cases, ...newCases])
           setImportOpen(false)
-          // Import always creates a new dataset per the API contract — go to it.
-          navigate(`/datasets/${d.id}`)
         }}
       />
       <AddCaseDialog

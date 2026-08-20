@@ -63,15 +63,17 @@ async function getModels(): Promise<ModelsResponse> {
 // ---------------------------------------------------------------------------
 
 async function listPrompts(): Promise<Prompt[]> {
-  return delay([...store.prompts].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+  return delay([...store.prompts].sort((a, b) => b.updated_at.localeCompare(a.updated_at)))
 }
 async function createPrompt(body: CreatePromptBody): Promise<CreatePromptResponse> {
   const id = store.ids.prompt++
+  const timestamp = nowIso()
   const prompt: Prompt = {
     id,
     name: body.name,
     description: body.description ?? null,
-    created_at: nowIso(),
+    created_at: timestamp,
+    updated_at: timestamp,
     version_count: 1,
     latest_version_no: 1,
   }
@@ -86,7 +88,7 @@ async function createPrompt(body: CreatePromptBody): Promise<CreatePromptRespons
     temperature: body.temperature ?? null,
     max_tokens: body.max_tokens ?? null,
     notes: null,
-    created_at: nowIso(),
+    created_at: timestamp,
     variables: extractVariableNames(body.template),
   }
   store.prompts.push(prompt)
@@ -103,8 +105,16 @@ async function getPrompt(id: number): Promise<PromptDetailResponse> {
 async function updatePrompt(id: number, body: UpdatePromptBody): Promise<Prompt> {
   const prompt = store.prompts.find((p) => p.id === id)
   if (!prompt) notFound('Prompt')
-  if (body.name != null) prompt.name = body.name
-  if (body.description != null) prompt.description = body.description
+  let changed = false
+  if (body.name != null) {
+    prompt.name = body.name
+    changed = true
+  }
+  if (body.description != null) {
+    prompt.description = body.description
+    changed = true
+  }
+  if (changed) prompt.updated_at = nowIso()
   return delay(prompt)
 }
 async function deletePrompt(id: number): Promise<void> {
@@ -133,6 +143,7 @@ async function createPromptVersion(id: number, body: CreatePromptVersionBody): P
   store.versions.push(version)
   prompt.version_count += 1
   prompt.latest_version_no = versionNo
+  prompt.updated_at = version.created_at
   return delay(version)
 }
 async function getPromptVersion(id: number): Promise<PromptVersion> {
@@ -344,16 +355,23 @@ async function importPreview(file: File): Promise<ImportPreviewResponse> {
 }
 async function importDataset(file: File, payload: ImportDatasetPayload): Promise<ImportDatasetResponse> {
   const preview = await importPreview(file)
-  const dataset: Dataset = {
-    id: store.ids.dataset++,
-    name: payload.name,
-    description: `Imported from ${file.name}`,
-    source: 'imported',
-    created_at: nowIso(),
-    case_count: 0,
-    variables: Object.values(payload.mapping),
+  let dataset: Dataset
+  if (payload.dataset_id != null) {
+    const existing = store.datasets.find((d) => d.id === payload.dataset_id)
+    if (!existing) notFound('Dataset')
+    dataset = existing
+  } else {
+    dataset = {
+      id: store.ids.dataset++,
+      name: payload.name ?? file.name,
+      description: `Imported from ${file.name}`,
+      source: 'imported',
+      created_at: nowIso(),
+      case_count: 0,
+      variables: Object.values(payload.mapping),
+    }
+    store.datasets.push(dataset)
   }
-  store.datasets.push(dataset)
   const cases: TestCase[] = preview.rows.map((row) => {
     const inputs: Record<string, string> = {}
     for (const [col, varName] of Object.entries(payload.mapping)) inputs[varName] = String(row[col] ?? '')

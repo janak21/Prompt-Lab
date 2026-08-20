@@ -8,10 +8,13 @@ type Step = 'drop' | 'mapping'
 export function ImportDatasetDialog({
   open,
   onClose,
+  datasetId,
   onImported,
 }: {
   open: boolean
   onClose: () => void
+  /** Append to this dataset, or omit to create a new one. */
+  datasetId?: number
   onImported: (result: { dataset: Dataset; cases: TestCase[] }) => void
 }) {
   const [step, setStep] = useState<Step>('drop')
@@ -81,7 +84,8 @@ export function ImportDatasetDialog({
       const finalMapping: Record<string, string> = {}
       for (const [col, varName] of Object.entries(mapping)) if (varName.trim()) finalMapping[col] = varName.trim()
       const res = await api.importDataset(file, {
-        name: name.trim() || file.name,
+        dataset_id: datasetId,
+        name: datasetId ? undefined : name.trim() || file.name,
         mapping: finalMapping,
         solution_criteria_column: solutionCriteriaColumn || undefined,
         category_column: categoryColumn || undefined,
@@ -167,7 +171,7 @@ export function ImportDatasetDialog({
               {preview.total_rows} row{preview.total_rows === 1 ? '' : 's'} detected — showing the first {preview.rows.length}
             </span>
           </div>
-          <Input label="Dataset name" value={name} onChange={(e) => setName(e.target.value)} />
+          {!datasetId && <Input label="Dataset name" value={name} onChange={(e) => setName(e.target.value)} />}
 
           <div className="flex flex-col gap-1.5">
             <label className="text-[13px] font-medium text-[var(--text-secondary)]">Column → variable mapping</label>

@@ -63,12 +63,12 @@ export function PromptsPage() {
       render: (p) => `${p.version_count} (v${p.latest_version_no} latest)`,
     },
     {
-      key: 'created_at',
+      key: 'updated_at',
       header: 'Updated',
       align: 'right',
       mono: true,
-      sortValue: (p) => p.created_at,
-      render: (p) => formatDate(p.created_at),
+      sortValue: (p) => p.updated_at,
+      render: (p) => formatDate(p.updated_at),
     },
   ]
 
@@ -106,7 +106,7 @@ export function PromptsPage() {
           rows={prompts}
           rowKey={(p) => p.id}
           onRowClick={(p) => navigate(`/prompts/${p.id}`)}
-          initialSort={{ key: 'created_at', direction: 'desc' }}
+          initialSort={{ key: 'updated_at', direction: 'desc' }}
         />
       )}
 

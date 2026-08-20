@@ -46,6 +46,7 @@ export interface Prompt {
   name: string
   description: string | null
   created_at: string
+  updated_at: string
   version_count: number
   latest_version_no: number
 }
@@ -319,7 +320,8 @@ export interface ImportPreviewResponse {
   total_rows: number
 }
 export interface ImportDatasetPayload {
-  name: string
+  dataset_id?: number
+  name?: string
   mapping: Record<string, string>
   solution_criteria_column?: string
   category_column?: string
