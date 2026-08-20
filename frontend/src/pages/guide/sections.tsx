@@ -540,8 +540,8 @@ Customer tier: {{customer_tier}}`}</span>
             for multi-document inputs, <Term>{'<document>'}</Term> containing <Term>{'<source>'}</Term> and{' '}
             <Term>{'<document_content>'}</Term>. Two rules: use <Strong>consistent, descriptive tag names</Strong>{' '}
             across your prompts, and <Strong>nest tags when content has a natural hierarchy</Strong> (documents
-            inside <Term>{'<documents>'}</Term>, each inside <Term>{'<document index="n">'}</Term>). Once a section
-            is tagged, reference it by name in your instructions — &ldquo;summarize the report in{' '}
+            inside <Term>{'<documents>'}</Term>, each inside <Term>{'<document index="n">'}</Term>). Once you tag a
+            section, reference it by name in your instructions — &ldquo;summarize the report in{' '}
             <Term>{'<context>'}</Term>&rdquo; is unambiguous in a way that &ldquo;summarize the above&rdquo; is not
             once a prompt has multiple sections.
           </P>
