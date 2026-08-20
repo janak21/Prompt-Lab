@@ -53,6 +53,37 @@ def check_upload_size(content: bytes) -> None:
         )
 
 
+_READ_CHUNK_BYTES = 1024 * 1024  # 1 MiB per chunk while streaming-checking the size cap.
+
+
+async def read_capped(file: Any, max_bytes: int = MAX_UPLOAD_BYTES) -> bytes:
+    """Read an (async, ``UploadFile``-shaped) file object in chunks, aborting as soon as
+    ``max_bytes`` is exceeded, instead of buffering the entire upload into memory first
+    and checking its size only afterwards.
+
+    Calling ``await file.read()`` with no size argument (as a naive implementation
+    would) reads and buffers the WHOLE request body before :func:`check_upload_size`
+    ever runs -- so a much-larger-than-allowed upload still gets fully read into
+    memory (or spooled to disk) before being rejected, defeating the point of a size
+    cap for a local, single-process tool. This reads bounded chunks and raises
+    :class:`UploadTooLargeError` the moment the running total exceeds ``max_bytes``,
+    without ever holding more than ``max_bytes + one chunk`` in memory.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > max_bytes:
+            raise UploadTooLargeError(
+                f"Upload exceeds the {max_bytes}-byte limit (stopped reading after {total} bytes)"
+            )
+    return b"".join(chunks)
+
+
 def detect_format(filename: str, content: bytes) -> str:
     """Detect ``"csv" | "json" | "jsonl"`` from the filename extension AND content.
 

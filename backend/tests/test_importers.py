@@ -45,6 +45,52 @@ class TestUploadSize:
             importers.check_upload_size(b"x" * (importers.MAX_UPLOAD_BYTES + 1))
 
 
+class _FakeAsyncFile:
+    """Minimal async file-like stand-in for FastAPI's UploadFile, chunked reads only."""
+
+    def __init__(self, content: bytes) -> None:
+        self._content = content
+        self._pos = 0
+        self.max_chunk_requested = 0
+        self.total_bytes_yielded = 0
+
+    async def read(self, size: int = -1) -> bytes:
+        self.max_chunk_requested = max(self.max_chunk_requested, size if size >= 0 else len(self._content))
+        end = len(self._content) if size < 0 else min(self._pos + size, len(self._content))
+        chunk = self._content[self._pos : end]
+        self._pos = end
+        self.total_bytes_yielded += len(chunk)
+        return chunk
+
+
+class TestReadCapped:
+    async def test_reads_full_content_within_limit(self) -> None:
+        content = b"a,b\n1,2\n"
+        f = _FakeAsyncFile(content)
+        result = await importers.read_capped(f, max_bytes=importers.MAX_UPLOAD_BYTES)
+        assert result == content
+
+    async def test_aborts_without_reading_the_whole_body_past_the_cap(self) -> None:
+        # A 50 MiB upload against a 5-byte cap: read_capped must stop as soon as the
+        # running total crosses the cap, not after buffering the entire body -- this
+        # is the actual bug class (check-after-full-read) that made the size limit
+        # documented but not really enforced against memory/disk pressure.
+        huge = b"x" * (50 * 1024 * 1024)
+        f = _FakeAsyncFile(huge)
+        with pytest.raises(importers.UploadTooLargeError):
+            await importers.read_capped(f, max_bytes=5)
+        # Only ever buffered a small, bounded number of chunks before aborting --
+        # nowhere close to the full 50 MiB body.
+        assert f.total_bytes_yielded < len(huge)
+        assert f.total_bytes_yielded <= 5 + importers._READ_CHUNK_BYTES
+
+    async def test_default_cap_matches_max_upload_bytes(self) -> None:
+        content = b"x" * (importers.MAX_UPLOAD_BYTES + 1)
+        f = _FakeAsyncFile(content)
+        with pytest.raises(importers.UploadTooLargeError):
+            await importers.read_capped(f)
+
+
 class TestCsvParsing:
     def test_basic(self) -> None:
         content = b"question,answer\nWhat is 2+2?,4\n"
