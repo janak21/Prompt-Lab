@@ -4,15 +4,14 @@ import { EmptyState, ErrorState, ScoreBadge, StatusPill, Table, TableSkeleton } 
 import type { Column } from '@/components/ui'
 import { LaunchRunPanel } from '@/components/runs/LaunchRunPanel'
 import { api, ApiError } from '@/lib/api'
+import { formatDateTime } from '@/lib/format'
 import type { Dataset, ModelInfo, Prompt, RunSummary } from '@/lib/types'
 
 function fmtCost(cost: number | null) {
   if (cost == null) return '—'
   return `$${cost.toFixed(4)}`
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
+const fmtDate = formatDateTime
 
 export function RunsPage() {
   const navigate = useNavigate()

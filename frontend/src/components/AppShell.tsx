@@ -22,6 +22,9 @@ const DatasetIcon = icon(
 )
 const RunIcon = icon(<path d="M3 2.5v11l10-5.5-10-5.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />)
 const CompareIcon = icon(<path d="M5.5 2.5v11M10.5 2.5v11M2.5 5.5h6M7.5 10.5h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />)
+const GuideIcon = icon(
+  <path d="M2.5 3.2c1.6-.6 3.4-.6 5 0v9.6c-1.6-.6-3.4-.6-5 0V3.2Z M13.5 3.2c-1.6-.6-3.4-.6-5 0v9.6c1.6-.6 3.4-.6 5 0V3.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />,
+)
 const SettingsIcon = icon(
   <>
     <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
@@ -41,6 +44,7 @@ const NAV_ITEMS = [
   { to: '/datasets', label: 'Datasets', icon: DatasetIcon },
   { to: '/runs', label: 'Runs', icon: RunIcon },
   { to: '/compare', label: 'Compare', icon: CompareIcon },
+  { to: '/guide', label: 'Guide', icon: GuideIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 

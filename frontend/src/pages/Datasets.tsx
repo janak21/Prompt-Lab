@@ -5,6 +5,7 @@ import type { Column } from '@/components/ui'
 import { GenerateDatasetDialog } from '@/components/datasets/GenerateDatasetDialog'
 import { ImportDatasetDialog } from '@/components/datasets/ImportDatasetDialog'
 import { api, ApiError } from '@/lib/api'
+import { formatDate } from '@/lib/format'
 import type { Dataset, DatasetSource } from '@/lib/types'
 
 const SOURCE_LABEL: Record<DatasetSource, string> = { generated: 'Generated', manual: 'Manual', imported: 'Imported' }
@@ -12,10 +13,6 @@ const SOURCE_VARIANT: Record<DatasetSource, 'accent' | 'neutral' | 'warning'> = 
   generated: 'accent',
   manual: 'neutral',
   imported: 'warning',
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export function DatasetsPage() {

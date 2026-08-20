@@ -20,6 +20,7 @@ import { CategoryBadge } from '@/components/datasets/CategoryBadge'
 import { categoryLabel } from '@/components/datasets/category'
 import { RunCaseDrawer } from '@/components/runs/RunCaseDrawer'
 import { api, ApiError } from '@/lib/api'
+import { formatDateTime } from '@/lib/format'
 import { subscribeToRunEvents } from '@/lib/sse'
 import type { Grade, RunCase, RunSummary, TestCase } from '@/lib/types'
 
@@ -51,10 +52,7 @@ function fmtCost(cost: number | null) {
   if (cost == null) return '—'
   return `$${cost.toFixed(4)}`
 }
-function fmtDate(iso: string | null) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
+const fmtDate = formatDateTime
 
 interface LocalStats {
   avg_score: number | null

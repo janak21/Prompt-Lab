@@ -1,16 +1,8 @@
 import { Badge, Button, Drawer } from '@/components/ui'
 import { cn } from '@/lib/cn'
+import { formatDateTime as formatDate } from '@/lib/format'
 import type { PromptVersion } from '@/lib/types'
 import { diffLines } from './diff'
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
 
 export function VersionHistoryRail({
   versions,

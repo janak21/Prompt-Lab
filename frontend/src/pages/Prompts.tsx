@@ -17,11 +17,8 @@ import {
 import type { Column } from '@/components/ui'
 import { VariableTemplateEditor, extractTemplateVariables } from '@/components/prompts/VariableTemplateEditor'
 import { api, ApiError } from '@/lib/api'
+import { formatDate } from '@/lib/format'
 import type { ModelInfo, Prompt } from '@/lib/types'
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
 
 export function PromptsPage() {
   const navigate = useNavigate()

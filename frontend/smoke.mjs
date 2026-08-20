@@ -43,6 +43,7 @@ const ROUTES = [
   { name: 'runs', path: '/runs', expect: 'Runs' },
   { name: 'run-detail', path: '/runs/1', expect: 'Runs' },
   { name: 'compare', path: '/compare', expect: 'Compare' },
+  { name: 'guide', path: '/guide', expect: 'Guide' },
   { name: 'settings', path: '/settings', expect: 'Settings' },
   { name: 'kitchen-sink', path: '/kitchen-sink', expect: 'Kitchen Sink', devOnly: true },
 ]
