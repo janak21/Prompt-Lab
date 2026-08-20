@@ -1,0 +1,257 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------- */
+/* Design tokens                                                          */
+/* ---------------------------------------------------------------------- */
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Neutral surfaces — layered by elevation (zinc scale) */
+  --surface-0: #101012;   /* app background */
+  --surface-1: #17181a;   /* sidebar / panels */
+  --surface-2: #1e1f22;   /* cards, table headers */
+  --surface-3: #27282c;   /* raised: dropdowns, popovers, modals */
+  --surface-4: #313236;   /* hover on raised surfaces */
+
+  --border-subtle: #29292d;
+  --border-default: #35363a;
+  --border-strong: #47484d;
+
+  --text-primary: #f2f2f3;
+  --text-secondary: #a8a9ad;
+  --text-tertiary: #717278;
+  --text-disabled: #4c4d52;
+
+  /* Single accent — amber. Used for primary action + current selection only. */
+  --accent-9: #f5a524;
+  --accent-10: #ffb648;
+  --accent-contrast: #17181a;
+  --accent-a-10: color-mix(in srgb, var(--accent-9) 10%, transparent);
+  --accent-a-20: color-mix(in srgb, var(--accent-9) 20%, transparent);
+  --accent-a-40: color-mix(in srgb, var(--accent-9) 40%, transparent);
+
+  --focus-ring: #ffb648;
+
+  /* Score quality scale */
+  --score-low: #f1554c;
+  --score-low-bg: color-mix(in srgb, var(--score-low) 16%, transparent);
+  --score-mid: #f5a524;
+  --score-mid-bg: color-mix(in srgb, var(--score-mid) 16%, transparent);
+  --score-high: #3dd68c;
+  --score-high-bg: color-mix(in srgb, var(--score-high) 16%, transparent);
+
+  /* Run status scale */
+  --status-pending: #8b8d94;
+  --status-pending-bg: color-mix(in srgb, var(--status-pending) 16%, transparent);
+  --status-running: #4d9fff;
+  --status-running-bg: color-mix(in srgb, var(--status-running) 16%, transparent);
+  --status-completed: #3dd68c;
+  --status-completed-bg: color-mix(in srgb, var(--status-completed) 16%, transparent);
+  --status-failed: #f1554c;
+  --status-failed-bg: color-mix(in srgb, var(--status-failed) 16%, transparent);
+  --status-cancelled: #b18cff;
+  --status-cancelled-bg: color-mix(in srgb, var(--status-cancelled) 16%, transparent);
+
+  /* A/B win / loss / tie */
+  --win: #3dd68c;
+  --win-bg: color-mix(in srgb, var(--win) 16%, transparent);
+  --loss: #f1554c;
+  --loss-bg: color-mix(in srgb, var(--loss) 16%, transparent);
+  --tie: #8b8d94;
+  --tie-bg: color-mix(in srgb, var(--tie) 16%, transparent);
+
+  --danger-9: #f1554c;
+  --danger-10: #ff6a61;
+
+  --shadow-color: 0deg 0% 0%;
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.4);
+  --shadow-md: 0 4px 16px -4px hsl(var(--shadow-color) / 0.5), 0 1px 2px hsl(var(--shadow-color) / 0.3);
+  --shadow-lg: 0 16px 40px -12px hsl(var(--shadow-color) / 0.6);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-0: #fafaf9;
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f3;
+  --surface-3: #ffffff;
+  --surface-4: #ececea;
+
+  --border-subtle: #e8e7e4;
+  --border-default: #dcdad6;
+  --border-strong: #c4c1bb;
+
+  --text-primary: #1c1c1e;
+  --text-secondary: #5b5c60;
+  --text-tertiary: #85868b;
+  --text-disabled: #b3b4b8;
+
+  --accent-9: #c8720a;
+  --accent-10: #a95f06;
+  --accent-contrast: #ffffff;
+  --accent-a-10: color-mix(in srgb, var(--accent-9) 10%, transparent);
+  --accent-a-20: color-mix(in srgb, var(--accent-9) 18%, transparent);
+  --accent-a-40: color-mix(in srgb, var(--accent-9) 35%, transparent);
+
+  --focus-ring: #a95f06;
+
+  --score-low: #d43d33;
+  --score-low-bg: color-mix(in srgb, var(--score-low) 12%, transparent);
+  --score-mid: #b8790a;
+  --score-mid-bg: color-mix(in srgb, var(--score-mid) 12%, transparent);
+  --score-high: #1a9d63;
+  --score-high-bg: color-mix(in srgb, var(--score-high) 12%, transparent);
+
+  --status-pending: #75767b;
+  --status-pending-bg: color-mix(in srgb, var(--status-pending) 12%, transparent);
+  --status-running: #1c6fd6;
+  --status-running-bg: color-mix(in srgb, var(--status-running) 12%, transparent);
+  --status-completed: #1a9d63;
+  --status-completed-bg: color-mix(in srgb, var(--status-completed) 12%, transparent);
+  --status-failed: #d43d33;
+  --status-failed-bg: color-mix(in srgb, var(--status-failed) 12%, transparent);
+  --status-cancelled: #8354d6;
+  --status-cancelled-bg: color-mix(in srgb, var(--status-cancelled) 12%, transparent);
+
+  --win: #1a9d63;
+  --win-bg: color-mix(in srgb, var(--win) 12%, transparent);
+  --loss: #d43d33;
+  --loss-bg: color-mix(in srgb, var(--loss) 12%, transparent);
+  --tie: #75767b;
+  --tie-bg: color-mix(in srgb, var(--tie) 12%, transparent);
+
+  --danger-9: #d43d33;
+  --danger-10: #b6291f;
+
+  --shadow-color: 220deg 20% 20%;
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.08);
+  --shadow-md: 0 4px 16px -4px hsl(var(--shadow-color) / 0.14), 0 1px 2px hsl(var(--shadow-color) / 0.08);
+  --shadow-lg: 0 16px 40px -12px hsl(var(--shadow-color) / 0.22);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --surface-0: #fafaf9;
+    --surface-1: #ffffff;
+    --surface-2: #f4f4f3;
+    --surface-3: #ffffff;
+    --surface-4: #ececea;
+    --border-subtle: #e8e7e4;
+    --border-default: #dcdad6;
+    --border-strong: #c4c1bb;
+    --text-primary: #1c1c1e;
+    --text-secondary: #5b5c60;
+    --text-tertiary: #85868b;
+    --text-disabled: #b3b4b8;
+    --accent-9: #c8720a;
+    --accent-10: #a95f06;
+    --accent-contrast: #ffffff;
+    --focus-ring: #a95f06;
+    --score-low: #d43d33;
+    --score-mid: #b8790a;
+    --score-high: #1a9d63;
+    --status-pending: #75767b;
+    --status-running: #1c6fd6;
+    --status-completed: #1a9d63;
+    --status-failed: #d43d33;
+    --status-cancelled: #8354d6;
+    --win: #1a9d63;
+    --loss: #d43d33;
+    --tie: #75767b;
+    --danger-9: #d43d33;
+    --danger-10: #b6291f;
+  }
+}
+
+* {
+  border-color: var(--border-default);
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.font-mono, code, pre, kbd {
+  font-family: var(--font-mono);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus rings: real, visible, never suppressed */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--accent-a-40);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

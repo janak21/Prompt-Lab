@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch();
+const p = await b.newPage({viewport:{width:1440,height:900}});
+const logs=[]; p.on('console',m=>{if(m.type()==='error')logs.push(m.text().slice(0,200))});
+p.on('pageerror',e=>logs.push('PAGEERROR: '+String(e.stack||e).slice(0,400)));
+await p.goto('http://localhost:8077/prompts',{waitUntil:'networkidle'});
+await p.waitForTimeout(1500);
+console.log('root children:', await p.evaluate(()=>document.getElementById('root')?.childElementCount));
+console.log('body text:', (await p.innerText('body')).replace(/\s+/g,' ').slice(0,200));
+console.log('errors:', logs.length?logs.join(' | '):'none');
+await p.screenshot({path:'/private/tmp/claude-501/-Users-janak-workspace-learn-CCAF-Anthropic-Prompt-Evaluation/6caf9959-c931-4a28-9112-10f959133da6/scratchpad/shots/built.png'});
+await b.close();
