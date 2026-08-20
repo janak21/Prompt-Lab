@@ -50,6 +50,12 @@ It prints a `[PASS]`/`[FAIL]` line per route, saves a screenshot per route to `.
 (gitignored), and exits non-zero if anything failed. Run it after any change that touches routing,
 the app shell, or `src/main.tsx`.
 
+It also works against a production build (`npm run build` then serve `../backend/app/static/`
+with the backend, e.g. `SMOKE_BASE_URL=http://localhost:8000 npm run smoke`). `/kitchen-sink` is
+registered only in dev (see `src/App.tsx`), so the script probes for a Vite dev server
+(`/@vite/client`) and expects that route to redirect to `/prompts` instead when it doesn't find
+one — it stays correct in both modes rather than reporting a false failure on a healthy prod build.
+
 ## Directory map
 
 - `src/lib/types.ts` — hand-written types mirroring `docs/API_CONTRACT.md`.

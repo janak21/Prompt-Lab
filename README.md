@@ -131,12 +131,22 @@ rather than reported as 0.
 ## Testing
 
 ```bash
-uv run pytest                                       # unit tests, LLM calls mocked (367+ tests)
+uv run pytest                                       # unit tests, LLM calls mocked (409 tests, 1 skipped)
 PROMPTLAB_LIVE_TESTS=1 uv run pytest -m live         # opt-in tier: real, billed Anthropic API calls
 ```
 
 The live tier is never run in CI and never runs by default — it's gated by both an env var
 and a pytest marker, deliberately redundant.
+
+**Two tests in `backend/tests/test_api.py` are conditional on the frontend being built.**
+The backend only mounts `/assets` when `backend/app/static/assets/` exists at import time
+(see `main.py`'s `if ASSETS_DIR.is_dir():` guard, which lets the server boot before a build
+exists). `TestStaticAssets` exercises that mount against the actual built assets, so both
+of its tests skip themselves — rather than failing — when the directory isn't there yet. On
+a fresh clone, before you've run `cd frontend && npm install && npm run build`, `uv run
+pytest` reports `407 passed, 3 skipped` (the two asset tests, plus the always-skipped
+opt-in live tier below). Build the frontend first (see
+[`frontend/README.md`](frontend/README.md)) to get the full `409 passed, 1 skipped` count.
 
 ```bash
 cd frontend && npm run smoke
