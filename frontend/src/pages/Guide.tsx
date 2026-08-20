@@ -104,7 +104,7 @@ export function GuidePage() {
           <h1 className="text-[28px] font-semibold tracking-tight text-[var(--text-primary)]">Guide</h1>
           <p className="text-[15px] leading-[1.6] text-[var(--text-secondary)]">
             What PromptLab is, where to start, and what everything means — read start to finish the first time, or
-            jump to a section from the list on the left.
+            jump to a section from the table of contents.
           </p>
         </header>
         <div className="flex flex-col gap-10">
