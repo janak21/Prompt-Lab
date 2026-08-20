@@ -14,3 +14,6 @@ backend/app/static/*
 !backend/app/static/.gitkeep
 frontend/.smoke-shots/
 .DS_Store
+
+# Agent worktrees and local session state
+.claude/
