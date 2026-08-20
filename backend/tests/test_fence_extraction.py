@@ -2,8 +2,8 @@
 
 Regression coverage for a bug found in the first live end-to-end run: the model returned
 ```` ```json\\n{...} ```` and `code_syntax` scored 0 on an answer the LLM judge rated 9/10,
-because `json.loads` chokes on the backtick. Assistant prefill (which the source notebooks
-used to suppress fences) returns HTTP 400 on Claude 5, so fenced output is now normal.
+because `json.loads` chokes on the backtick. Assistant prefill (previously used to
+suppress fences) returns HTTP 400 on Claude 5, so fenced output is now normal.
 """
 
 from __future__ import annotations

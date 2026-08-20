@@ -12,7 +12,7 @@ Per ``docs/API_CONTRACT.md`` rule 0, assistant-turn prefill is REMOVED on Claude
 ``llm.json_complete(messages, model=..., schema=<json_schema_dict>, ...)`` with an
 explicit ``schema`` -- this selects the structured-outputs path unconditionally, so
 generation works on every model in the roster, including the ones prefill no longer
-works on. The source notebooks' ```` ```json ```` prefill trick is NOT used here.
+works on. The ```` ```json ```` prefill trick is NOT used here.
 
 Exact-variable-keys guarantee
 -------------------------------

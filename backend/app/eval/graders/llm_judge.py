@@ -1,23 +1,21 @@
 """``llm_judge`` grader: an LLM scores the model's output against a rubric.
 
-Ported from the source notebook's ``grade_by_model`` (``../001_prompt_evals_complete.ipynb``,
-the cell defining the AWS-code-review judge prompt), with two changes required by the
-frozen contract:
+Two deliberate design choices:
 
-1. **Structured outputs, not prefill.** The notebook gets JSON out of the model by
-   prefilling an assistant turn with ` ```json ` and stopping at ` ``` `. That trick is
-   removed on Claude Opus 5 / Sonnet 5 (HTTP 400). This grader always calls
+1. **Structured outputs, not prefill.** An older technique gets JSON out of the model
+   by prefilling an assistant turn with ` ```json ` and stopping at ` ``` `. That trick
+   is unsupported on Claude Opus 5 / Sonnet 5 (HTTP 400). This grader always calls
    ``llm.json_complete(..., schema=...)`` -- the structured-outputs path -- regardless
    of which model is configured as judge (see API_CONTRACT.md rule 0).
 2. **Field order.** The JSON schema's ``properties`` (and ``required``) list
    ``strengths``, ``weaknesses``, ``reasoning``, ``score`` in that order, so the model
    is asked to articulate strengths/weaknesses and reason about them *before* it
-   commits to a number -- the notebook's own field order, preserved deliberately.
+   commits to a number.
 
-The rubric comes from the grader's ``config.rubric`` (not hardcoded, unlike the
-notebook's fixed AWS-review prompt). ``config.use_solution_criteria`` controls whether
-the test case's ``solution_criteria`` is included as grounding. ``config.judge_model``
-overrides the run's judge model when set.
+The rubric comes from the grader's ``config.rubric`` (fully configurable, not
+hardcoded). ``config.use_solution_criteria`` controls whether the test case's
+``solution_criteria`` is included as grounding. ``config.judge_model`` overrides the
+run's judge model when set.
 """
 
 from __future__ import annotations

@@ -165,9 +165,9 @@ cancelled      {run_id}
 ---
 
 ## Cross-cutting rules
-0. **STRUCTURED JSON MUST NOT RELY ON ASSISTANT PREFILL.** The source notebooks get JSON out of the
+0. **STRUCTURED JSON MUST NOT RELY ON ASSISTANT PREFILL.** An older technique gets JSON out of the
    model by prefilling an assistant turn with ```` ```json ```` and stopping at ```` ``` ````. That
-   technique is **removed on Claude 5 models and returns HTTP 400**. Every place PromptLab needs
+   technique is **unsupported on Claude 5 models and returns HTTP 400**. Every place PromptLab needs
    structured JSON from the model (the `llm_judge` grader and dataset generation) MUST use
    **structured outputs** — `output_config={"format": {...}}` on `messages.create()` — as the primary
    path. Prefill is permitted ONLY as a fallback for models whose `supports_prefill` flag is true.

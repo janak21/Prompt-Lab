@@ -17,8 +17,8 @@ below), so it's the only path that works uniformly across the whole model roster
 
 The prefill trick (fallback path only, capability-gated)
 -----------------------------------------------------------
-The seed notebooks (``001_prompt_evals_complete.ipynb``) get structured output out of
-Claude by appending an assistant-turn "prefill" (e.g. ```` ```json ````) and setting
+An older technique for getting structured output out of Claude appends an
+assistant-turn "prefill" (e.g. ```` ```json ````) and sets
 ``stop_sequences=["```"]``. Anthropic's API then returns only the *continuation* after
 the prefill -- the prefill text itself is not echoed back. :meth:`LLMClient.complete`
 reproduces this: pass ``prefill=...`` and it appends an assistant message with that
@@ -215,7 +215,7 @@ class LLMClient(ABC):
         """Run one chat completion.
 
         If ``prefill`` is given, an assistant message with that text is appended to
-        ``messages`` before the call (the notebooks' prefill trick). The returned
+        ``messages`` before the call (the prefill trick). The returned
         ``text`` is the model's continuation only, unless ``prefill_in_result=True``,
         in which case ``prefill`` is prepended to it. Implementations must raise
         :class:`PrefillNotSupportedError` (via :func:`_require_prefill_supported`)
@@ -249,8 +249,8 @@ class LLMClient(ABC):
         the underlying API call. The response is guaranteed valid JSON matching the
         schema -- no prefill, no repair retry needed.
 
-        **Fallback path** (used only when ``schema`` is omitted): reproduces the
-        notebooks' ```` ```json ```` prefill + stop-sequence trick. This path is
+        **Fallback path** (used only when ``schema`` is omitted): uses the
+        ```` ```json ```` prefill + stop-sequence trick. This path is
         capability-gated -- :meth:`complete` raises :class:`PrefillNotSupportedError`
         if ``model`` doesn't support prefill (see module docstring). If the response
         isn't valid JSON, retries up to ``max_repair_attempts`` times (default 1) by
