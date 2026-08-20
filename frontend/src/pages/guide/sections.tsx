@@ -57,7 +57,7 @@ const ADVERSARIAL_CATEGORIES: { id: string; label: string; blurb: string; exampl
   {
     id: 'boundary_length',
     label: 'boundary_length',
-    blurb: 'Pushes a length boundary hard: a single word where a paragraph is expected, or hundreds of words where a short answer is expected.',
+    blurb: 'Pushes a length boundary hard: a single word where the prompt expects a paragraph, or hundreds of words where it expects a short answer.',
     example: 'ticket_text = "help" — one word, no context at all.',
   },
   {
@@ -183,17 +183,17 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     render: () => (
       <Section id="concepts" title="Concepts">
         <P>
-          The vocabulary below is used consistently across the whole app. Each term links to where you&rsquo;ll
-          actually use it.
+          This vocabulary stays consistent across the whole app. Each term links to where you&rsquo;ll actually use
+          it.
         </P>
 
         <SubSection id="concept-prompt" title="Prompt & {{variables}}">
           <P>
             A <Strong>prompt</Strong> is a reusable template with <Term>{'{{variable}}'}</Term> placeholders —
             literal double braces around a bare name, for example <Term>{'{{ticket_text}}'}</Term>. When a version runs
-            against a test case, every placeholder is substituted with that case&rsquo;s matching{' '}
-            <Term>inputs</Term> value. A run is blocked up front if the dataset is missing a variable the prompt
-            needs — PromptLab checks this before spending any money.
+            against a test case, PromptLab substitutes every placeholder with that case&rsquo;s matching{' '}
+            <Term>inputs</Term> value. It blocks a run up front if the dataset is missing a variable the prompt
+            needs, so you never spend money on a run that can&rsquo;t work.
           </P>
           <Example label="Template + inputs → rendered prompt">
             <ExampleRow k="template" v={'"Classify this ticket: {{ticket_text}}\\nTier: {{customer_tier}}"'} />
@@ -329,7 +329,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             </LI>
             <LI>
               <Strong>budget</Strong> — checks the case&rsquo;s actual latency, cost, and/or output token count
-              against ceilings you set; 10 if every configured ceiling holds, 0 if any is exceeded. Says nothing
+              against ceilings you set; 10 if every configured ceiling holds, 0 if the case exceeds any of them. Says nothing
               about output quality — pair it with another grader, don&rsquo;t use it alone.
             </LI>
           </UL>
@@ -341,10 +341,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             of its graders&rsquo; scores, normalized: two graders weighted 2 and 1 contribute roughly 67% and 33% to
             the final score respectively, regardless of what the raw weight numbers are.
           </P>
-          <Callout tone="warning" title="A skipped grader is excluded, not scored zero">
+          <Callout tone="warning" title="PromptLab excludes a skipped grader instead of scoring it zero">
             If a grader has nothing to check — <Term>string_match</Term> with no constraints configured,{' '}
-            <Term>code_syntax: auto</Term> on a case with no <Term>expected_format</Term> — it is marked{' '}
-            <Term>skipped</Term> and drops out of <em>both</em> the numerator and the denominator, as if it had
+            <Term>code_syntax: auto</Term> on a case with no <Term>expected_format</Term> — PromptLab marks it{' '}
+            <Term>skipped</Term> and drops it out of <em>both</em> the numerator and the denominator, as if it had
             never run. It does not drag the average down as a zero would.
           </Callout>
           <Example label="Worked example — string_match (w1, score 8) + llm_judge (w2, score 6) + code_syntax (skipped)">
@@ -796,7 +796,7 @@ Customer tier: {{customer_tier}}`}</span>
             </LI>
           </UL>
           <P>
-            The <AppLink to="/prompts">worked walkthrough</AppLink> above runs exactly this loop on{' '}
+            The <Term>Worked walkthrough</Term> above runs exactly this loop on{' '}
             <Strong>&ldquo;Support Ticket Triage (v1 - deliberately weak)&rdquo;</Strong>: standard cases score well,
             several adversarial categories don&rsquo;t, and the v1→v2 fix list is the category → fix table above
             applied to that specific prompt.
