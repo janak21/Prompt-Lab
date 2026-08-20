@@ -17,3 +17,6 @@ frontend/.smoke-shots/
 
 # Agent worktrees and local session state
 .claude/
+
+# Original 1024px logo artwork (optimized copies live in frontend/public/)
+promptLab_log.png

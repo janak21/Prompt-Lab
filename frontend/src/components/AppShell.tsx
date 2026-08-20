@@ -25,11 +25,13 @@ const CompareIcon = icon(<path d="M5.5 2.5v11M10.5 2.5v11M2.5 5.5h6M7.5 10.5h6" 
 const GuideIcon = icon(
   <path d="M2.5 3.2c1.6-.6 3.4-.6 5 0v9.6c-1.6-.6-3.4-.6-5 0V3.2Z M13.5 3.2c-1.6-.6-3.4-.6-5 0v9.6c1.6-.6 3.4-.6 5 0V3.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />,
 )
+// A cog, not a sun. The previous circle-with-radiating-lines read as a brightness
+// control, which is the wrong affordance next to a theme toggle.
 const SettingsIcon = icon(
-  <>
-    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
-    <path d="M8 2.5v1.5M8 12v1.5M13.5 8H12M4 8H2.5M11.6 4.4l-1 1M5.4 10.6l-1 1M11.6 11.6l-1-1M5.4 5.4l-1-1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-  </>,
+  <g transform="scale(0.6667)" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none">
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" />
+    <circle cx="12" cy="12" r="3" />
+  </g>,
 )
 const SunIcon = icon(
   <>
@@ -55,9 +57,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-full bg-[var(--surface-0)]">
       <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--surface-1)]">
         <div className="flex h-12 items-center gap-2 border-b border-[var(--border-subtle)] px-4">
-          <div className="flex h-5 w-5 items-center justify-center rounded-[5px] bg-[var(--accent-9)] text-[11px] font-bold text-[var(--accent-contrast)]">
-            P
-          </div>
+          <img
+            src="/logo-64.png"
+            alt=""
+            width={20}
+            height={20}
+            className="h-5 w-5 shrink-0 rounded-[5px]"
+          />
           <span className="text-[13px] font-semibold tracking-tight text-[var(--text-primary)]">PromptLab</span>
           {MOCK_MODE && (
             <span className="ml-auto rounded border border-[var(--border-default)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)]">
