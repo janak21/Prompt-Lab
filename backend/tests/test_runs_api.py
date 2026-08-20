@@ -295,6 +295,69 @@ class TestSSE:
         resp = await client.get("/api/runs/999999/events")
         assert resp.status_code == 404
 
+    async def test_client_disconnect_mid_stream_unsubscribes_no_leak(self, tmp_db) -> None:
+        # If a browser tab navigates away or the client just stops reading mid-run,
+        # the SSE generator's `finally: EVENT_BUS.unsubscribe(...)` must still run --
+        # otherwise every abandoned SSE connection leaves a queue subscribed forever
+        # (a slow, unbounded memory leak for a long-lived local server).
+        from backend.app.eval import runner as runner_mod
+
+        prompt = models.create_prompt("P")
+        version = models.create_prompt_version(prompt["id"], "Echo: {{x}}", model="claude-haiku-4-5")
+        dataset = models.create_dataset("D")
+        for i in range(6):
+            models.create_test_case(dataset["id"], {"x": str(i)})
+
+        class SlowFakeLLM(FakeLLM):
+            async def complete(self, *args, **kwargs):
+                await asyncio.sleep(0.05)
+                return await super().complete(*args, **kwargs)
+
+        fake = SlowFakeLLM(default_response="ok")
+        app = _make_app(fake)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            post_task = asyncio.create_task(
+                client.post(
+                    "/api/runs",
+                    json={"prompt_version_id": version["id"], "dataset_id": dataset["id"], "concurrency": 1},
+                )
+            )
+
+            run_id = None
+            for _ in range(100):
+                rows = models.list_runs()
+                if rows:
+                    run_id = rows[0]["id"]
+                    break
+                await asyncio.sleep(0.01)
+            assert run_id is not None
+
+            for _ in range(100):
+                if models.get_run(run_id)["status"] == "running":
+                    break
+                await asyncio.sleep(0.005)
+
+            # Open the stream, read exactly one chunk, then close the connection --
+            # simulating a client that goes away mid-run instead of reading to
+            # completion.
+            async with client.stream("GET", f"/api/runs/{run_id}/events") as resp:
+                assert resp.status_code == 200
+                async for _chunk in resp.aiter_bytes():
+                    break  # abandon the stream after the first chunk
+
+            # The abandoned connection's queue must be cleaned up promptly (allow a
+            # short grace period for the ASGI layer to propagate the disconnect).
+            for _ in range(100):
+                if run_id not in runner_mod.EVENT_BUS._subscribers:
+                    break
+                await asyncio.sleep(0.01)
+            assert run_id not in runner_mod.EVENT_BUS._subscribers, (
+                "SSE subscriber queue was not cleaned up after client disconnect"
+            )
+
+            await post_task  # let the background run finish before the test ends
+
     async def test_live_run_streams_events_in_order_and_late_subscriber_catches_up(self, tmp_db) -> None:
         prompt = models.create_prompt("P")
         version = models.create_prompt_version(prompt["id"], "Echo: {{x}}", model="claude-haiku-4-5")
