@@ -8,6 +8,7 @@ import { DatasetDetailPage } from '@/pages/DatasetDetail'
 import { RunsPage } from '@/pages/Runs'
 import { RunDetailPage } from '@/pages/RunDetail'
 import { ComparePage } from '@/pages/Compare'
+import { GuidePage } from '@/pages/Guide'
 import { SettingsPage } from '@/pages/Settings'
 import { KitchenSinkPage } from '@/pages/KitchenSink'
 
@@ -23,6 +24,7 @@ function App() {
         <Route path="/runs" element={<RunsPage />} />
         <Route path="/runs/:id" element={<RunDetailPage />} />
         <Route path="/compare" element={<ComparePage />} />
+        <Route path="/guide" element={<GuidePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         {import.meta.env.DEV && <Route path="/kitchen-sink" element={<KitchenSinkPage />} />}
         <Route path="*" element={<Navigate to="/prompts" replace />} />
