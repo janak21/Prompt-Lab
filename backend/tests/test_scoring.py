@@ -85,6 +85,14 @@ class TestBuildRunStats:
         stats = build_run_stats(cases)
         assert stats["avg_score"] == 10.0
 
+    def test_avg_score_is_none_when_every_case_fails(self) -> None:
+        cases = [_case(final_score=None, status="failed"), _case(final_score=None, status="failed")]
+        stats = build_run_stats(cases)
+        assert stats["avg_score"] is None
+        assert stats["total"] == 2
+        assert stats["failed"] == 2
+        assert stats["distribution"] == [0] * 10
+
     def test_total_cost_and_latency_sum(self) -> None:
         cases = [_case(cost=0.1, latency_ms=100), _case(cost=0.2, latency_ms=200)]
         stats = build_run_stats(cases)
@@ -123,6 +131,27 @@ class TestBuildRunStats:
         cases = [_case(final_score=5, category=None)]
         stats = build_run_stats(cases)
         assert stats["by_category"]["uncategorized"]["count"] == 1
+
+    def test_by_category_single_case(self) -> None:
+        cases = [_case(final_score=7, category="only_one")]
+        stats = build_run_stats(cases)
+        assert stats["by_category"] == {"only_one": {"avg_score": 7.0, "count": 1}}
+
+    def test_by_category_excludes_categories_with_zero_scored_cases(self) -> None:
+        # A category whose only case failed (final_score None) contributes nothing --
+        # it must not appear in by_category at all (not even as 0/None).
+        cases = [
+            _case(final_score=8, category="standard"),
+            _case(final_score=None, status="failed", category="all_failed"),
+        ]
+        stats = build_run_stats(cases)
+        assert "all_failed" not in stats["by_category"]
+        assert stats["by_category"]["standard"]["count"] == 1
+
+    def test_by_grader_absent_when_no_scored_grades_at_all(self) -> None:
+        cases = [_case(final_score=None, grades=[_grade(0, 1, status="failed")])]
+        stats = build_run_stats(cases)
+        assert stats["by_grader"] == {}
 
     def test_distribution_ten_buckets(self) -> None:
         stats = build_run_stats([])

@@ -197,6 +197,75 @@ class TestCompare:
         assert len(body["cases"]) == 2
         assert body["wins"]["a"] + body["wins"]["b"] + body["wins"]["tie"] == 2
 
+    async def test_compare_case_present_only_on_one_side(self, client, tmp_db, fake_llm) -> None:
+        # Dataset extended with a new case AFTER run A launched but BEFORE run B --
+        # so run B has a case (and thus a RunCase/score) that run A never saw at all.
+        prompt, version, dataset = _setup(n_cases=1)
+        models.create_grader(prompt["id"], "string_match", "sm", {"must_contain": ["hello"]})
+        run_a = (await client.post("/api/runs", json={"prompt_version_id": version["id"], "dataset_id": dataset["id"]})).json()["run_id"]
+
+        extra_case = models.create_test_case(dataset["id"], {"x": "extra"})
+        run_b = (await client.post("/api/runs", json={"prompt_version_id": version["id"], "dataset_id": dataset["id"]})).json()["run_id"]
+
+        resp = await client.get(f"/api/runs/compare?a={run_a}&b={run_b}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["cases"]) == 2  # the union of both runs' cases
+
+        extra_row = next(c for c in body["cases"] if c["test_case"]["id"] == extra_case["id"])
+        assert extra_row["a"] is None  # run A never had this case
+        assert extra_row["b"] is not None
+        assert extra_row["winner"] == "b"  # only b has a score, so b "wins" this case
+        # Every case present in the response must resolve to exactly one of the three
+        # winner buckets, and total wins must equal total cases.
+        assert body["wins"]["a"] + body["wins"]["b"] + body["wins"]["tie"] == 2
+
+    async def test_compare_case_present_but_a_ungraded_treated_as_b_win(self, client, tmp_db) -> None:
+        # A case present in BOTH runs (same run_case row exists in each), but run A's
+        # only grader (llm_judge) raised -> that grade is "failed" -> excluded from
+        # the weighted average -> run A's final_score is None for this case, even
+        # though the RunCase itself isn't null. Compare must treat "no score" the
+        # same as "no case" for winner/delta purposes: b wins outright.
+        prompt = models.create_prompt("P")
+        version = models.create_prompt_version(prompt["id"], "Echo: {{x}}", model="claude-haiku-4-5")
+        dataset = models.create_dataset("D")
+        tc = models.create_test_case(dataset["id"], {"x": "1"})
+
+        from backend.app.eval import runner
+
+        fake_a = FakeLLM(default_response="hello world")
+        fake_a.queue_response("hello world")  # main model completion call succeeds
+        fake_a.queue_failure(RuntimeError("judge exploded"))  # then the judge call fails
+        run_a = models.create_run(
+            version["id"], dataset["id"], model="claude-haiku-4-5", temperature=0.0, max_tokens=100,
+            judge_model="claude-sonnet-5", concurrency=5,
+            grader_snapshot=[{"name": "judge", "type": "llm_judge", "weight": 1, "config": {"rubric": "r"}, "enabled": True}],
+            status="pending",
+        )
+        await runner.run_evaluation(run_a["id"], fake_a)
+
+        fake_b = FakeLLM(default_response="hello world")
+        fake_b.queue_response("hello world")  # main model completion call
+        fake_b.queue_response(json.dumps({"strengths": [], "weaknesses": [], "reasoning": "ok", "score": 7}))  # judge call
+        run_b = models.create_run(
+            version["id"], dataset["id"], model="claude-haiku-4-5", temperature=0.0, max_tokens=100,
+            judge_model="claude-sonnet-5", concurrency=5,
+            grader_snapshot=[{"name": "judge", "type": "llm_judge", "weight": 1, "config": {"rubric": "r"}, "enabled": True}],
+            status="pending",
+        )
+        await runner.run_evaluation(run_b["id"], fake_b)
+
+        resp = await client.get(f"/api/runs/compare?a={run_a['id']}&b={run_b['id']}")
+        assert resp.status_code == 200
+        body = resp.json()
+        row = body["cases"][0]
+        assert row["test_case"]["id"] == tc["id"]
+        assert row["a"] is not None  # the RunCase row exists in both runs...
+        assert row["a"]["final_score"] is None  # ...but a's only grader failed -> no score
+        assert row["b"]["final_score"] == 7.0
+        assert row["winner"] == "b"
+        assert row["delta"] == -7.0
+
     async def test_compare_404_when_run_missing(self, client, tmp_db, fake_llm) -> None:
         _, version, dataset = _setup(n_cases=1)
         run_a = (await client.post("/api/runs", json={"prompt_version_id": version["id"], "dataset_id": dataset["id"]})).json()["run_id"]
@@ -225,6 +294,69 @@ class TestSSE:
     async def test_404_events_for_missing_run(self, client, tmp_db) -> None:
         resp = await client.get("/api/runs/999999/events")
         assert resp.status_code == 404
+
+    async def test_client_disconnect_mid_stream_unsubscribes_no_leak(self, tmp_db) -> None:
+        # If a browser tab navigates away or the client just stops reading mid-run,
+        # the SSE generator's `finally: EVENT_BUS.unsubscribe(...)` must still run --
+        # otherwise every abandoned SSE connection leaves a queue subscribed forever
+        # (a slow, unbounded memory leak for a long-lived local server).
+        from backend.app.eval import runner as runner_mod
+
+        prompt = models.create_prompt("P")
+        version = models.create_prompt_version(prompt["id"], "Echo: {{x}}", model="claude-haiku-4-5")
+        dataset = models.create_dataset("D")
+        for i in range(6):
+            models.create_test_case(dataset["id"], {"x": str(i)})
+
+        class SlowFakeLLM(FakeLLM):
+            async def complete(self, *args, **kwargs):
+                await asyncio.sleep(0.05)
+                return await super().complete(*args, **kwargs)
+
+        fake = SlowFakeLLM(default_response="ok")
+        app = _make_app(fake)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            post_task = asyncio.create_task(
+                client.post(
+                    "/api/runs",
+                    json={"prompt_version_id": version["id"], "dataset_id": dataset["id"], "concurrency": 1},
+                )
+            )
+
+            run_id = None
+            for _ in range(100):
+                rows = models.list_runs()
+                if rows:
+                    run_id = rows[0]["id"]
+                    break
+                await asyncio.sleep(0.01)
+            assert run_id is not None
+
+            for _ in range(100):
+                if models.get_run(run_id)["status"] == "running":
+                    break
+                await asyncio.sleep(0.005)
+
+            # Open the stream, read exactly one chunk, then close the connection --
+            # simulating a client that goes away mid-run instead of reading to
+            # completion.
+            async with client.stream("GET", f"/api/runs/{run_id}/events") as resp:
+                assert resp.status_code == 200
+                async for _chunk in resp.aiter_bytes():
+                    break  # abandon the stream after the first chunk
+
+            # The abandoned connection's queue must be cleaned up promptly (allow a
+            # short grace period for the ASGI layer to propagate the disconnect).
+            for _ in range(100):
+                if run_id not in runner_mod.EVENT_BUS._subscribers:
+                    break
+                await asyncio.sleep(0.01)
+            assert run_id not in runner_mod.EVENT_BUS._subscribers, (
+                "SSE subscriber queue was not cleaned up after client disconnect"
+            )
+
+            await post_task  # let the background run finish before the test ends
 
     async def test_live_run_streams_events_in_order_and_late_subscriber_catches_up(self, tmp_db) -> None:
         prompt = models.create_prompt("P")

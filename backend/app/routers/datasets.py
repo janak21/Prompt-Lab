@@ -235,9 +235,8 @@ async def generate_dataset(body: GenerateDatasetRequest) -> GenerateDatasetRespo
 @router.post("/api/datasets/import/preview", response_model=ImportPreviewResponse)
 async def import_preview(file: UploadFile = File(...)) -> ImportPreviewResponse:
     """Preview an upload: detected format, columns, first 10 rows, total row count."""
-    content = await file.read()
     try:
-        importers.check_upload_size(content)
+        content = await importers.read_capped(file)
     except importers.UploadTooLargeError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     try:
@@ -261,9 +260,8 @@ async def import_dataset(file: UploadFile = File(...), payload: str = Form(...))
     except ValidationError as exc:
         raise http_422_from_validation_error(exc) from exc
 
-    content = await file.read()
     try:
-        importers.check_upload_size(content)
+        content = await importers.read_capped(file)
     except importers.UploadTooLargeError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     try:

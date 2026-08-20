@@ -320,7 +320,16 @@ class AnthropicLLM(LLMClient):
     """Real Anthropic-backed implementation, with retry/backoff and cost accounting."""
 
     def __init__(self, api_key: str | None) -> None:
-        self._client = AsyncAnthropic(api_key=api_key)
+        # max_retries=0: the SDK's own default (max_retries=2) would silently retry
+        # each `messages.create()` call internally on 429/5xx BEFORE ever returning
+        # control to `_call_with_retry` below -- so without this, a single logical
+        # attempt from our retry loop's perspective is actually up to 3 real HTTP
+        # requests, and MAX_ATTEMPTS (contractually "max 4 attempts", per
+        # API_CONTRACT.md rule 2) would silently balloon to up to 4 * 3 = 12 real
+        # requests with two independent, stacked backoff schedules. Disabling the
+        # SDK's built-in retry makes `_call_with_retry` the single source of truth
+        # for attempt count and backoff, matching the documented contract exactly.
+        self._client = AsyncAnthropic(api_key=api_key, max_retries=0)
 
     async def complete(
         self,

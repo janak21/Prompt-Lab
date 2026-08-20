@@ -107,6 +107,16 @@ class TestJsonComplete:
 
 
 class TestAnthropicLLMRetry:
+    def test_sdk_internal_retries_are_disabled(self) -> None:
+        # The SDK's own default max_retries=2 would retry each messages.create() call
+        # internally BEFORE _call_with_retry ever sees a failure -- stacking with our
+        # own MAX_ATTEMPTS retry loop and silently exceeding the "max 4 attempts"
+        # contract (API_CONTRACT.md rule 2) by up to 3x, with two independent backoff
+        # schedules. AnthropicLLM must construct its client with max_retries=0 so
+        # _call_with_retry is the sole source of retry/backoff behavior.
+        llm = AnthropicLLM(api_key="fake-key")
+        assert llm._client.max_retries == 0
+
     async def test_retries_on_429_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         llm = AnthropicLLM(api_key="fake-key")
         calls = {"n": 0}
