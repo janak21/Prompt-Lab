@@ -20,6 +20,7 @@ export function AddCaseDialog({
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [extraVarNames, setExtraVarNames] = useState<string[]>([])
   const [newVarName, setNewVarName] = useState('')
+  const [conversation, setConversation] = useState('[]')
   const [solutionCriteria, setSolutionCriteria] = useState('')
   const [category, setCategory] = useState('standard')
   const [expectedFormat, setExpectedFormat] = useState<ExpectedFormat>(null)
@@ -33,6 +34,7 @@ export function AddCaseDialog({
       setNewVarName('')
       setSolutionCriteria('')
       setCategory('standard')
+      setConversation('[]')
       setExpectedFormat(null)
       setError(null)
     }
@@ -52,10 +54,19 @@ export function AddCaseDialog({
       setError('Fill in at least one input variable.')
       return
     }
+    let turns: string[]
+    try {
+      turns = JSON.parse(conversation)
+      if (!Array.isArray(turns) || turns.some((t) => typeof t !== 'string') || turns.length > 20) throw new Error()
+    } catch {
+      setError('Conversation must be a JSON array of up to 20 user-turn strings.')
+      return
+    }
     setSubmitting(true)
     try {
       const tc = await api.createCase(datasetId, {
         inputs,
+        conversation: turns,
         solution_criteria: solutionCriteria.trim() || undefined,
         category,
         expected_format: expectedFormat ?? undefined,
@@ -119,6 +130,7 @@ export function AddCaseDialog({
           </Button>
         </div>
         {error && <span className="text-[12px] text-[var(--danger-10)]">{error}</span>}
+        <Textarea label="Conversation (JSON array of user turns)" value={conversation} onChange={(e) => setConversation(e.target.value)} mono minRows={3} hint="Leave [] for a single output. The rendered prompt prefixes the first turn." />
         <Textarea
           label="Solution criteria"
           value={solutionCriteria}

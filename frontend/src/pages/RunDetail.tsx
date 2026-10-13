@@ -22,7 +22,8 @@ import { RunCaseDrawer } from '@/components/runs/RunCaseDrawer'
 import { api, ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 import { subscribeToRunEvents } from '@/lib/sse'
-import type { Grade, RunCase, RunSummary, TestCase } from '@/lib/types'
+import { computeLocalStats } from '@/components/runs/stats'
+import type { RunCase, RunSummary, TestCase } from '@/lib/types'
 
 function placeholderTestCase(id: number, datasetId: number): TestCase {
   return { id, dataset_id: datasetId, inputs: {}, solution_criteria: null, category: null, expected_format: null, created_at: '' }
@@ -53,46 +54,6 @@ function fmtCost(cost: number | null) {
   return `$${cost.toFixed(4)}`
 }
 const fmtDate = formatDateTime
-
-interface LocalStats {
-  avg_score: number | null
-  distribution: number[]
-  by_grader: Record<string, { avg_score: number; weight: number }>
-  by_category: Record<string, { avg_score: number; count: number }>
-}
-
-function computeLocalStats(rows: RunCase[]): LocalStats {
-  const completed = rows.filter((r) => r.status === 'completed')
-  const scores = completed.map((r) => r.final_score).filter((s): s is number => s != null)
-  const avg_score = scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100 : null
-  const distribution = new Array(10).fill(0)
-  for (const s of scores) distribution[Math.min(9, Math.max(0, Math.floor(s)))] += 1
-
-  const byGrader = new Map<string, { sum: number; weight: number; n: number }>()
-  for (const r of completed) {
-    for (const g of r.grades as Grade[]) {
-      const e = byGrader.get(g.grader_name) ?? { sum: 0, weight: g.weight, n: 0 }
-      e.sum += g.score
-      e.n += 1
-      byGrader.set(g.grader_name, e)
-    }
-  }
-  const by_grader: LocalStats['by_grader'] = {}
-  for (const [name, v] of byGrader) by_grader[name] = { avg_score: Math.round((v.sum / v.n) * 100) / 100, weight: v.weight }
-
-  const byCategory = new Map<string, { sum: number; n: number }>()
-  for (const r of completed) {
-    const cat = r.test_case.category ?? 'standard'
-    const e = byCategory.get(cat) ?? { sum: 0, n: 0 }
-    if (r.final_score != null) e.sum += r.final_score
-    e.n += 1
-    byCategory.set(cat, e)
-  }
-  const by_category: LocalStats['by_category'] = {}
-  for (const [cat, v] of byCategory) by_category[cat] = { avg_score: v.n ? Math.round((v.sum / v.n) * 100) / 100 : 0, count: v.n }
-
-  return { avg_score, distribution, by_grader, by_category }
-}
 
 export function RunDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -202,6 +163,8 @@ export function RunDetailPage() {
               test_case_id: data.test_case_id,
               status: data.status,
               final_score: data.final_score,
+              passed: data.passed,
+              error: data.error ?? null,
               latency_ms: data.latency_ms,
               cost: data.cost,
               output: data.output_preview,
@@ -210,7 +173,7 @@ export function RunDetailPage() {
             })
           },
           case_failed: (data) => {
-            patchRow(data.idx, { id: data.run_case_id, status: 'failed', error: data.error })
+            patchRow(data.idx, { id: data.run_case_id, status: 'failed', passed: false, error: data.error })
           },
           progress: (data) => {
             setProgress({ completed: data.completed, failed: data.failed, total: data.total, avg_score_so_far: data.avg_score_so_far })
@@ -220,7 +183,7 @@ export function RunDetailPage() {
             refreshFull(res.run.dataset_id)
           },
           run_failed: (data) => {
-            setRun((r) => (r ? { ...r, status: 'failed', error: data.error } : r))
+            setRun((r) => (r ? { ...r, status: 'failed', passed: false, error: data.error } : r))
             refreshFull(res.run.dataset_id)
           },
           cancelled: () => {
@@ -404,7 +367,8 @@ export function RunDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
+        <MetricTile label="Pass rate" value={localStats.pass_rate != null ? (localStats.pass_rate * 100).toFixed(1) + '%' : '—'} />
         <MetricTile label="Average score" value={localStats.avg_score != null ? <ScoreBadge score={localStats.avg_score} size="lg" /> : '—'} />
         <MetricTile label="Completed" value={run.completed || progress.completed} />
         <MetricTile label="Failed" value={run.failed || progress.failed} />

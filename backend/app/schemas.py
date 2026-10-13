@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator,
 # --------------------------------------------------------------------------
 
 DatasetSource = Literal["generated", "manual", "imported"]
-GraderType = Literal["llm_judge", "code_syntax", "string_match", "json_schema", "budget"]
+GraderType = Literal["llm_judge", "code_syntax", "string_match", "json_schema", "budget", "tool_calls"]
 RunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 RunCaseStatus = Literal["pending", "running", "completed", "failed"]
 CodeSyntaxFormat = Literal["json", "python", "regex", "auto"]
@@ -36,6 +36,35 @@ ImportFormat = Literal["csv", "json", "jsonl"]
 # --------------------------------------------------------------------------
 # Shared shapes
 # --------------------------------------------------------------------------
+
+
+class MockTool(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
+    description: str = ""
+    input_schema: dict[str, Any]
+    response: Any = None
+
+    @field_validator("input_schema")
+    @classmethod
+    def _valid_schema(cls, value: dict[str, Any]) -> dict[str, Any]:
+        try:
+            jsonschema.validators.validator_for(value).check_schema(value)
+        except jsonschema.SchemaError as exc:
+            raise ValueError(f"Invalid tool input_schema: {exc.message}") from exc
+        if value.get("type") != "object":
+            raise ValueError("Tool input_schema must have type object.")
+        return value
+
+
+def validate_tool_names(tools: list[MockTool]) -> list[MockTool]:
+    if len({tool.name for tool in tools}) != len(tools):
+        raise ValueError("Mock tool names must be unique.")
+    return tools
+
+
+Conversation = Annotated[list[str], Field(max_length=20)]
 
 
 class Prompt(BaseModel):
@@ -77,10 +106,14 @@ class Grader(BaseModel):
     config: dict[str, Any]
     enabled: bool
     position: int
+    gating: bool = False
+    pass_threshold: float = 8.0
 
 
 class Dataset(BaseModel):
     """A named collection of test cases."""
+
+    tools: list[MockTool] = Field(default_factory=list)
 
     id: int
     name: str
@@ -93,6 +126,8 @@ class Dataset(BaseModel):
 
 class TestCase(BaseModel):
     """A single input example within a dataset."""
+
+    conversation: Conversation = Field(default_factory=list)
 
     id: int
     dataset_id: int
@@ -117,6 +152,9 @@ class Grade(BaseModel):
 class RunCase(BaseModel):
     """One test case's execution + grading result within a run."""
 
+    transcript: list[dict[str, Any]] = Field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+
     id: int
     run_id: int
     test_case_id: int
@@ -127,6 +165,7 @@ class RunCase(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost: float | None = None
+    passed: bool | None = None
     final_score: float | None = None
     status: RunCaseStatus
     error: str | None = None
@@ -148,6 +187,7 @@ class RunSummary(BaseModel):
     judge_model: str
     temperature: float
     status: RunStatus
+    pass_rate: float | None = None
     avg_score: float | None = None
     total_cost: float | None = None
     total: int
@@ -176,6 +216,7 @@ class CategoryStat(BaseModel):
 class RunStats(BaseModel):
     """Aggregate statistics computed over a run's cases."""
 
+    pass_rate: float | None = None
     avg_score: float | None = None
     total_cost: float = 0.0
     total_latency_ms: int = 0
@@ -362,12 +403,21 @@ class BudgetConfig(BaseModel):
         return self
 
 
+class ToolCallsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str = Field(min_length=1)
+    mode: Literal["never_called", "called_with_arguments"]
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 GRADER_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "llm_judge": LLMJudgeConfig,
     "code_syntax": CodeSyntaxConfig,
     "string_match": StringMatchConfig,
     "json_schema": JsonSchemaConfig,
     "budget": BudgetConfig,
+    "tool_calls": ToolCallsConfig,
 }
 
 
@@ -386,7 +436,12 @@ def validate_grader_config(grader_type: str, config: dict[str, Any]) -> dict[str
     return instance.model_dump(mode="json", by_alias=True)
 
 
-class _LLMJudgeGraderCreate(BaseModel):
+class _GraderCreateBase(BaseModel):
+    gating: bool = False
+    pass_threshold: float = Field(default=8.0, ge=0, le=10, allow_inf_nan=False)
+
+
+class _LLMJudgeGraderCreate(_GraderCreateBase):
     type: Literal["llm_judge"]
     name: str
     weight: float = 1.0
@@ -395,7 +450,7 @@ class _LLMJudgeGraderCreate(BaseModel):
     position: int = 0
 
 
-class _CodeSyntaxGraderCreate(BaseModel):
+class _CodeSyntaxGraderCreate(_GraderCreateBase):
     type: Literal["code_syntax"]
     name: str
     weight: float = 1.0
@@ -404,7 +459,7 @@ class _CodeSyntaxGraderCreate(BaseModel):
     position: int = 0
 
 
-class _StringMatchGraderCreate(BaseModel):
+class _StringMatchGraderCreate(_GraderCreateBase):
     type: Literal["string_match"]
     name: str
     weight: float = 1.0
@@ -413,7 +468,7 @@ class _StringMatchGraderCreate(BaseModel):
     position: int = 0
 
 
-class _JsonSchemaGraderCreate(BaseModel):
+class _JsonSchemaGraderCreate(_GraderCreateBase):
     type: Literal["json_schema"]
     name: str
     weight: float = 1.0
@@ -422,11 +477,20 @@ class _JsonSchemaGraderCreate(BaseModel):
     position: int = 0
 
 
-class _BudgetGraderCreate(BaseModel):
+class _BudgetGraderCreate(_GraderCreateBase):
     type: Literal["budget"]
     name: str
     weight: float = 1.0
     config: BudgetConfig
+    enabled: bool = True
+    position: int = 0
+
+
+class _ToolCallsGraderCreate(_GraderCreateBase):
+    type: Literal["tool_calls"]
+    name: str
+    weight: float = 1.0
+    config: ToolCallsConfig
     enabled: bool = True
     position: int = 0
 
@@ -436,7 +500,8 @@ GraderCreate = Annotated[
     | _CodeSyntaxGraderCreate
     | _StringMatchGraderCreate
     | _JsonSchemaGraderCreate
-    | _BudgetGraderCreate,
+    | _BudgetGraderCreate
+    | _ToolCallsGraderCreate,
     Field(discriminator="type"),
 ]
 """Discriminated union for POST /api/prompts/{id}/graders. FastAPI validates the request
@@ -457,6 +522,8 @@ class GraderPatch(BaseModel):
     config: dict[str, Any] | None = None
     enabled: bool | None = None
     position: int | None = None
+    gating: bool | None = None
+    pass_threshold: float | None = Field(default=None, ge=0, le=10, allow_inf_nan=False)
 
 
 # --------------------------------------------------------------------------
@@ -465,11 +532,21 @@ class GraderPatch(BaseModel):
 
 
 class DatasetCreate(BaseModel):
+    tools: list[MockTool] = Field(default_factory=list, max_length=20)
+    _unique_tools = field_validator("tools")(validate_tool_names)
+
     name: str
     description: str | None = None
 
 
 class DatasetPatch(BaseModel):
+    tools: list[MockTool] | None = Field(default=None, max_length=20)
+
+    @field_validator("tools")
+    @classmethod
+    def _unique_tools(cls, tools: list[MockTool] | None) -> list[MockTool] | None:
+        return validate_tool_names(tools) if tools is not None else None
+
     name: str | None = None
     description: str | None = None
 
@@ -480,6 +557,7 @@ class DatasetDetailResponse(BaseModel):
 
 
 class TestCaseCreate(BaseModel):
+    conversation: Conversation = Field(default_factory=list)
     inputs: dict[str, str]
     solution_criteria: str | None = None
     category: str | None = None
@@ -487,6 +565,7 @@ class TestCaseCreate(BaseModel):
 
 
 class TestCasePatch(BaseModel):
+    conversation: Conversation | None = None
     inputs: dict[str, str] | None = None
     solution_criteria: str | None = None
     category: str | None = None
@@ -567,6 +646,7 @@ class CompareSideResponse(BaseModel):
 
 class CompareDeltas(BaseModel):
     avg_score: float
+    pass_rate: float | None = None
     total_cost: float
     by_grader: dict[str, float] = Field(default_factory=dict)
     by_category: dict[str, float] = Field(default_factory=dict)
@@ -611,6 +691,8 @@ class CaseStartedEvent(BaseModel):
 
 
 class CaseCompletedEvent(BaseModel):
+    passed: bool | None = None
+    error: str | None = None
     run_case_id: int
     test_case_id: int
     idx: int
@@ -636,6 +718,7 @@ class ProgressEvent(BaseModel):
 
 
 class RunCompletedEvent(BaseModel):
+    pass_rate: float | None = None
     run_id: int
     avg_score: float | None
     total_cost: float

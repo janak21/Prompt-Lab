@@ -215,6 +215,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
     errors. Each migration here is guarded by a ``PRAGMA table_info`` check so it is
     a no-op (and safe to re-run) once applied.
     """
+    for table, columns in {
+        "grader": {"gating": "INTEGER NOT NULL DEFAULT 0", "pass_threshold": "REAL NOT NULL DEFAULT 8.0"},
+        "run": {"pass_rate": "REAL", "tools_snapshot_json": "TEXT NOT NULL DEFAULT '[]'"},
+        "dataset": {"tools_json": "TEXT NOT NULL DEFAULT '[]'"},
+        "test_case": {"conversation_json": "TEXT NOT NULL DEFAULT '[]'"},
+        "run_case": {"passed": "INTEGER", "transcript_json": "TEXT NOT NULL DEFAULT '[]'", "tool_calls_json": "TEXT NOT NULL DEFAULT '[]'"},
+    }.items():
+        existing = _column_names(conn, table)
+        for name, declaration in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
+                if table == "run_case" and name == "passed":
+                    # Old runs had no gates; preserve their execution verdict.
+                    conn.execute("UPDATE run_case SET passed = (status = 'completed') WHERE status IN ('completed', 'failed')")
+
     prompt_columns = _column_names(conn, "prompt")
     if "updated_at" not in prompt_columns:
         conn.execute("ALTER TABLE prompt ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")

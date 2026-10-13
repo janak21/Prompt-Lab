@@ -34,14 +34,16 @@ an ``await`` on the network; each write call is a self-contained synchronous op.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any
 
 from .. import models, templating
 from ..llm import LLMClient
+from .conversation import run_conversation
 from .graders import GRADER_REGISTRY
 from .graders.base import GradeContext
-from .scoring import build_run_stats, compute_final_score
+from .scoring import build_run_stats, compute_final_score, compute_passed
 
 TERMINAL_EVENTS = {"run_completed", "run_failed", "cancelled"}
 OUTPUT_PREVIEW_LEN = 240
@@ -158,14 +160,16 @@ async def _grade_case(
             row = models.create_grade(
                 run_case_id, name, grader_type, 0.0, weight,
                 reasoning=f"Unknown grader type: {grader_type!r}",
-                details={"_status": "failed"},
+                details={"_status": "failed", "_gating": grader_def.get("gating", False)},
             )
             persisted.append(row)
             continue
 
+        case_result = models.get_run_case(run_case_id) or {}
         ctx = GradeContext(
             test_case=test_case,
-            output=output,
+            output=json.dumps(case_result.get("transcript")) if grader_type == "llm_judge" and test_case.get("conversation") else output,
+            tool_calls=case_result.get("tool_calls", []),
             config=grader_def.get("config") or {},
             llm=llm,
             judge_model=judge_model,
@@ -182,7 +186,7 @@ async def _grade_case(
             result.score,
             weight,
             reasoning=result.reasoning,
-            details=result.details_with_status(),
+            details={**result.details_with_status(), "_gating": grader_def.get("gating", False), "_pass_threshold": grader_def.get("pass_threshold", 8.0)},
         )
         persisted.append(row)
     return persisted
@@ -218,7 +222,7 @@ async def _process_case(
         try:
             rendered = templating.render(prompt_version["template"], test_case.get("inputs") or {})
         except Exception as exc:  # noqa: BLE001 - case isolation
-            models.update_run_case(run_case_id, status="failed", error=str(exc), rendered_prompt=None)
+            models.update_run_case(run_case_id, status="failed", passed=False, error=str(exc), rendered_prompt=None)
             await EVENT_BUS.publish(run_id, "case_failed", {"run_case_id": run_case_id, "idx": idx, "error": str(exc)})
             await _bump_progress(run_id, progress, progress_lock, failed=True)
             return
@@ -227,15 +231,18 @@ async def _process_case(
 
         messages = [{"role": "user", "content": rendered}]
         try:
-            result = await llm.complete(
-                messages,
-                model=run["model"],
-                system=prompt_version.get("system_prompt"),
-                temperature=run["temperature"],
-                max_tokens=run["max_tokens"],
-            )
+            if test_case.get("conversation"):
+                result = await run_conversation(run_case_id, run, prompt_version, test_case, rendered, llm)
+            else:
+                result = await llm.complete(
+                    messages,
+                    model=run["model"],
+                    system=prompt_version.get("system_prompt"),
+                    temperature=run["temperature"],
+                    max_tokens=run["max_tokens"],
+                )
         except Exception as exc:  # noqa: BLE001 - case isolation (retries already exhausted)
-            models.update_run_case(run_case_id, status="failed", error=str(exc))
+            models.update_run_case(run_case_id, status="failed", passed=False, error=str(exc))
             await EVENT_BUS.publish(run_id, "case_failed", {"run_case_id": run_case_id, "idx": idx, "error": str(exc)})
             await _bump_progress(run_id, progress, progress_lock, failed=True)
             return
@@ -263,13 +270,16 @@ async def _process_case(
                 result.input_tokens,
             )
         except Exception as exc:  # noqa: BLE001 - case isolation; grading must not kill the case
-            models.update_run_case(run_case_id, status="failed", error=f"Grading failed: {exc}")
+            models.update_run_case(run_case_id, status="failed", passed=False, error=f"Grading failed: {exc}")
             await EVENT_BUS.publish(run_id, "case_failed", {"run_case_id": run_case_id, "idx": idx, "error": str(exc)})
             await _bump_progress(run_id, progress, progress_lock, failed=True)
             return
 
         final_score = compute_final_score(grades)
-        models.update_run_case(run_case_id, final_score=final_score, status="completed")
+        passed = compute_passed(grades)
+        status = "failed" if passed is False else "completed"
+        error = "Gating grader failed." if passed is False else None
+        models.update_run_case(run_case_id, final_score=final_score, passed=passed, status=status, error=error)
 
         await EVENT_BUS.publish(
             run_id,
@@ -281,12 +291,14 @@ async def _process_case(
                 "final_score": final_score,
                 "latency_ms": result.latency_ms,
                 "cost": result.cost_usd,
-                "status": "completed",
+                "status": status,
+                "passed": passed,
+                "error": error,
                 "output_preview": _output_preview(result.text),
                 "grades": [_grade_to_event_shape(g) for g in grades],
             },
         )
-        await _bump_progress(run_id, progress, progress_lock, completed=True, score=final_score)
+        await _bump_progress(run_id, progress, progress_lock, completed=passed is not False, failed=passed is False, score=final_score)
 
 
 def _grade_to_event_shape(grade: dict[str, Any]) -> dict[str, Any]:
@@ -317,6 +329,9 @@ async def _bump_progress(
                 progress["scored_count"] += 1
         if failed:
             progress["failed"] += 1
+            if score is not None:
+                progress["score_sum"] += score
+                progress["scored_count"] += 1
         avg_score_so_far = (
             progress["score_sum"] / progress["scored_count"] if progress["scored_count"] > 0 else None
         )
@@ -394,13 +409,13 @@ async def run_evaluation(run_id: int, llm: LLMClient) -> None:
         if cancelled:
             models.update_run(
                 run_id, status="cancelled", finished_at=finished_at,
-                avg_score=stats["avg_score"], total_cost=stats["total_cost"],
+                avg_score=stats["avg_score"], pass_rate=stats["pass_rate"], total_cost=stats["total_cost"],
             )
             await EVENT_BUS.publish(run_id, "cancelled", {"run_id": run_id})
         else:
             models.update_run(
                 run_id, status="completed", finished_at=finished_at,
-                avg_score=stats["avg_score"], total_cost=stats["total_cost"],
+                avg_score=stats["avg_score"], pass_rate=stats["pass_rate"], total_cost=stats["total_cost"],
             )
             await EVENT_BUS.publish(
                 run_id,
@@ -408,6 +423,7 @@ async def run_evaluation(run_id: int, llm: LLMClient) -> None:
                 {
                     "run_id": run_id,
                     "avg_score": stats["avg_score"],
+                    "pass_rate": stats["pass_rate"],
                     "total_cost": stats["total_cost"],
                     "completed": stats["completed"],
                     "failed": stats["failed"],

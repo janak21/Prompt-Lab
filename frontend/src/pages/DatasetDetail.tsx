@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Badge, Button, ErrorState, Skeleton, TableSkeleton } from '@/components/ui'
+import { MockToolsDialog } from '@/components/datasets/MockToolsDialog'
 import { AddCaseDialog } from '@/components/datasets/AddCaseDialog'
 import { CaseTable } from '@/components/datasets/CaseTable'
 import { GenerateDatasetDialog } from '@/components/datasets/GenerateDatasetDialog'
@@ -25,6 +26,7 @@ export function DatasetDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [generateOpen, setGenerateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
 
   const load = () => {
@@ -90,6 +92,7 @@ export function DatasetDetailPage() {
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" onClick={() => setToolsOpen(true)}>Mock tools ({dataset.tools?.length ?? 0})</Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             Import
           </Button>
@@ -102,6 +105,7 @@ export function DatasetDetailPage() {
         </div>
       </div>
 
+      {toolsOpen && <MockToolsDialog dataset={dataset} open={toolsOpen} onClose={() => setToolsOpen(false)} onSaved={(d) => { setDataset(d); setToolsOpen(false) }} />}
       <CaseTable cases={cases} variables={variables} onCasesChange={syncMeta} onAddCase={() => setAddOpen(true)} />
 
       <GenerateDatasetDialog

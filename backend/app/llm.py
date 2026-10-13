@@ -72,6 +72,7 @@ import json
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from copy import deepcopy
 from typing import Any
 
 import anthropic
@@ -190,6 +191,8 @@ class LLMResult:
     cost_usd: float
     latency_ms: int
     model: str
+    content: list[dict[str, Any]] | None = None
+    stop_reason: str | None = None
 
 
 class LLMClient(ABC):
@@ -210,6 +213,7 @@ class LLMClient(ABC):
         stop_sequences: list[str] | None = None,
         prefill: str | None = None,
         prefill_in_result: bool = False,
+        tools: list[dict[str, Any]] | None = None,
         output_schema: dict[str, Any] | None = None,
     ) -> LLMResult:
         """Run one chat completion.
@@ -342,6 +346,7 @@ class AnthropicLLM(LLMClient):
         stop_sequences: list[str] | None = None,
         prefill: str | None = None,
         prefill_in_result: bool = False,
+        tools: list[dict[str, Any]] | None = None,
         output_schema: dict[str, Any] | None = None,
         effort: str | None = None,
     ) -> LLMResult:
@@ -366,6 +371,8 @@ class AnthropicLLM(LLMClient):
         # of failing the whole call.
         if pricing.supports_temperature(model):
             params["temperature"] = temperature
+        if tools:
+            params["tools"] = tools
         if system:
             params["system"] = system
         if stop_sequences:
@@ -388,7 +395,11 @@ class AnthropicLLM(LLMClient):
         latency_ms = int((loop.time() - start) * 1000)
 
         try:
-            text = _first_text_block(response.content, model, getattr(response, "stop_reason", None))
+            if tools is not None and getattr(response, "stop_reason", None) == "tool_use":
+                # Tool-only responses are valid; keep every text block alongside calls.
+                text = "\n".join(block.text for block in response.content if block.type == "text")
+            else:
+                text = _first_text_block(response.content, model, getattr(response, "stop_reason", None))
         except NoTextBlockError as exc:
             # Adaptive thinking ate the whole budget before producing an answer. A judge
             # grade is expensive to lose to a budget hiccup, so buy a bigger budget once
@@ -416,6 +427,8 @@ class AnthropicLLM(LLMClient):
             cost_usd=cost_usd,
             latency_ms=latency_ms,
             model=model,
+            content=[block.model_dump(mode="json", exclude_none=True) for block in response.content] if tools is not None else None,
+            stop_reason=getattr(response, "stop_reason", None),
         )
 
     async def _call_with_retry(self, **params: Any) -> Any:
@@ -470,6 +483,7 @@ class RecordedCall:
     prefill: str | None
     prefill_in_result: bool
     output_schema: dict[str, Any] | None
+    tools: list[dict[str, Any]] | None = None
 
 
 class FakeLLM(LLMClient):
@@ -515,13 +529,17 @@ class FakeLLM(LLMClient):
         self.default_output_tokens = default_output_tokens
         self.default_latency_ms = default_latency_ms
 
-        self._queued_responses: list[str] = []
+        self._queued_responses: list[str | tuple[list[dict[str, Any]], str]] = []
         self._queued_failures: list[Exception] = []
         self.calls: list[RecordedCall] = []
 
     def queue_response(self, text: str) -> None:
         """Enqueue a response to be returned by the next ``complete`` call (FIFO)."""
         self._queued_responses.append(text)
+
+    def queue_message(self, content: list[dict[str, Any]], *, stop_reason: str = "end_turn") -> None:
+        """Queue structured Messages API content, including tool-use blocks."""
+        self._queued_responses.append((deepcopy(content), stop_reason))
 
     def queue_failure(self, exc: Exception) -> None:
         """Enqueue an exception to be raised by the next ``complete`` call (FIFO)."""
@@ -542,6 +560,7 @@ class FakeLLM(LLMClient):
         stop_sequences: list[str] | None = None,
         prefill: str | None = None,
         prefill_in_result: bool = False,
+        tools: list[dict[str, Any]] | None = None,
         output_schema: dict[str, Any] | None = None,
         effort: str | None = None,
     ) -> LLMResult:
@@ -551,7 +570,7 @@ class FakeLLM(LLMClient):
 
         self.calls.append(
             RecordedCall(
-                messages=list(messages),
+                messages=deepcopy(messages),
                 model=model,
                 system=system,
                 temperature=temperature,
@@ -560,13 +579,21 @@ class FakeLLM(LLMClient):
                 prefill=prefill,
                 prefill_in_result=prefill_in_result,
                 output_schema=output_schema,
+                tools=deepcopy(tools),
             )
         )
 
         if self._queued_failures:
             raise self._queued_failures.pop(0)
 
-        text = self._queued_responses.pop(0) if self._queued_responses else self.default_response
+        response = self._queued_responses.pop(0) if self._queued_responses else self.default_response
+        if isinstance(response, tuple):
+            content, stop_reason = response
+            text = "\n".join(block["text"] for block in content if block["type"] == "text")
+        else:
+            text = response
+            content = [{"type": "text", "text": text}]
+            stop_reason = "end_turn"
         if prefill_in_result and prefill:
             text = prefill + text
 
@@ -577,4 +604,6 @@ class FakeLLM(LLMClient):
             cost_usd=compute_cost(model, self.default_input_tokens, self.default_output_tokens),
             latency_ms=self.default_latency_ms,
             model=model,
+            content=content,
+            stop_reason=stop_reason,
         )

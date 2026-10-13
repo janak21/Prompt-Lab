@@ -48,11 +48,135 @@ If no key resolves, `run.sh` prints a warning and starts anyway, so you can stil
 3. Attach one or more graders to the prompt and set their weights.
 4. Run the prompt against the dataset. Results stream in live as each case completes.
 5. Read the results: overall average, per-grader averages, and — the point of the product —
-   per-category averages, so a weak category shows up even when the overall number looks fine.
+   pass rate and per-category averages, so a weak category shows up even when the overall number looks fine.
 6. Revise the prompt, save it as a new version, run it again, and compare the two runs.
 
 For the full walkthrough, concept reference, and a guide to writing better prompts, see the
 in-app **Guide** at `/guide` once PromptLab is running.
+
+## Hard rules and pass rate
+
+Enable **Gating** in a grader's configuration to make it a hard rule. A scored gate
+that fails marks the case failed, even when its weighted average is high. Scores keep
+their original meaning and weights (a zero-weight gate still applies).
+
+- String Match requires **every** constraint to hold (score 10).
+- Code Syntax, JSON Schema, Budget, and Tool Calls require score 10.
+- LLM Judge requires score >= its **Pass threshold**, default 8.0 on the 0–10 scale.
+- Skipped or errored gates are inconclusive, never counted as passes.
+
+Pass rate is passing cases / all cases in the run. Execution failures and inconclusive
+gates count against it; an empty run has no rate. With no gates, successful execution
+passes. Results and Compare show the rate beside the average. Grader flags and judge
+thresholds are snapshotted at launch, so changing a grader never changes old verdicts.
+
+## Headless evaluations for CI
+
+Run a saved prompt and dataset without starting the server:
+
+```bash
+PROMPTLAB_DB=/absolute/path/to/evaluations.db uv run promptlab run \
+  --prompt "Support" --version 2 --dataset "Tickets" \
+  --fail-under 8.0 --require-pass-rate 1.0 --json report.json
+```
+
+Names match exactly; duplicate names require an id, and numeric selectors are ids.
+Omit --version to use the latest version. PROMPTLAB_DB selects the same SQLite database
+used by the web UI (relative paths resolve as described in the data model). Graders and
+model settings come from that prompt version and its prompt's enabled graders.
+
+The summary includes average, pass rate, category averages, and failed/inconclusive
+cases. Exit codes: **0** for success, **1** for execution/grader errors or unmet
+thresholds, **2** for invalid selectors/settings or setup/report-file errors.
+The default required pass rate is **1.0**; lower it explicitly to allow some gate
+failures. --fail-under is optional. Unscored runs cannot meet a score threshold.
+Reports use the run-detail API shape and are written after execution even if thresholds
+fail. Empty datasets are rejected. The CLI does not seed automatically.
+
+Example GitHub Actions steps after checkout and installing uv (the seed creates a
+demo fixture without model calls; replace it with your own fixture setup for real CI):
+
+```yaml
+- name: Evaluate the demo prompt
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    PROMPTLAB_DB: ${{ runner.temp }}/promptlab-ci.db
+  run: |
+    uv sync
+    uv run python -m backend.app.seed
+    uv run promptlab run --prompt "AWS Code Generator" --version 1 \
+      --dataset "AWS Tasks" --fail-under 8.0 --require-pass-rate 1.0 \
+      --json report.json
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: promptlab-report
+    path: report.json
+```
+
+Actual evaluations call Anthropic and incur normal API costs. The report never contains
+the API key.
+
+## Scripted conversations and mock tools
+
+On a dataset page, **Add case** accepts a JSON array of user turns. The case's inputs
+still fill the prompt template; that rendered prompt prefixes the first user turn.
+Later turns are literal text. Leave the array empty for the original single-output
+behavior. Example case body for POST /api/datasets/{id}/cases:
+
+```json
+{
+  "inputs": {"tier": "standard"},
+  "category": "contradictory",
+  "conversation": ["I paid yesterday. Can I get a refund?", "Actually I never paid."],
+  "solution_criteria": "Do not refund an unpaid order."
+}
+```
+
+Use **Mock tools** on the dataset page to save canned tools (also accepted by dataset
+POST/PATCH as a tools array):
+
+```json
+[
+  {
+    "name": "refund",
+    "description": "Refund an order in this test.",
+    "input_schema": {
+      "type": "object",
+      "properties": {"order_id": {"type": "string"}},
+      "required": ["order_id"],
+      "additionalProperties": false
+    },
+    "response": {"refunded": true}
+  }
+]
+```
+
+Tool definitions and responses are snapshotted at launch. The runner sends structured
+Anthropic tool definitions, preserves the full assistant content, supplies a tool_result
+for each call, and resumes until that turn ends before sending the next scripted user
+turn. Text accompanying a tool call stays in the reply. No mock executes real actions.
+Unknown tools, schema-invalid arguments, truncated replies, and loop exhaustion fail
+the case while retaining its partial transcript and all attempted calls.
+
+Add a **Tool Calls** grader and enable Gating to enforce never_called, or
+called_with_arguments. For example, a grader config
+{"tool":"refund","mode":"never_called"} forbids every refund attempt.
+{"tool":"refund","mode":"called_with_arguments","arguments":{"order_id":"123"}}
+requires at least one valid call with those top-level argument values; extra arguments
+are allowed and nested values compare exactly.
+
+The case drawer shows the transcript, tool calls, canned responses, and grades.
+The output field joins all assistant text across turns; text/schema graders inspect that
+combined output, the LLM judge receives the transcript, and Budget checks totals across
+all model calls. Tool Calls checks the entire conversation.
+
+This first version supports up to **20 user turns**, **20 tools**, and **8 tool rounds
+per turn**. Tools apply only to scripted cases. It does not provide rule-based/stateful
+tool responses, real tools, server tools, streaming within a turn, branching user
+simulators, per-turn grading, tool-order assertions, or conversation import/generation.
+Create/edit conversations through the UI or case API; the existing importer remains
+for single-output cases.
 
 ## Adversarial categories
 
@@ -102,10 +226,8 @@ PROMPTLAB_LIVE_TESTS=1 uv run pytest -m live         # opt-in tier: real, billed
 The live tier never runs in CI and never runs by default — it's gated by both an environment
 variable and a pytest marker, deliberately redundant.
 
-Two tests in `backend/tests/test_api.py` exercise the built frontend's static assets and skip
-themselves when `backend/app/static/assets/` doesn't exist yet. On a fresh clone, before you
-build the frontend, `uv run pytest` reports `421 passed, 3 skipped`. Build the frontend first
-(`cd frontend && npm install && npm run build`) to get the full `423 passed, 1 skipped`.
+Static-asset tests skip when the frontend has not been built. Build it first
+(`cd frontend && npm install && npm run build`) to exercise those checks.
 
 ```bash
 cd frontend && npm run smoke

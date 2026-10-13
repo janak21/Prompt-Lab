@@ -27,6 +27,7 @@ export function RunCaseDrawer({
           <div className="flex flex-wrap items-center gap-2">
             <CategoryBadge category={row.test_case.category} />
             <ScoreBadge score={row.final_score} />
+            <span className="text-[12px]">{row.passed == null ? 'Gate verdict unavailable' : row.passed ? 'Pass' : 'Fail'}</span>
             <span className="text-[12px] text-[var(--text-tertiary)]">
               {fmtMs(row.latency_ms)} · {fmtCost(row.cost)} ·{' '}
               {row.input_tokens != null && row.output_tokens != null
@@ -102,6 +103,18 @@ export function RunCaseDrawer({
             )}
           </div>
 
+          {!!row.transcript?.length && <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-medium text-[var(--text-secondary)]">Conversation transcript</span>
+            {row.transcript.map((message, i) => <div key={i}>
+              <span className="text-[12px] font-medium">{message.role}</span>
+              <CodeBlock code={typeof message.content === 'string' ? message.content : JSON.stringify(message.content, null, 2)} language="json" collapseAfterLines={20} />
+            </div>)}
+          </div>}
+          {!!row.transcript?.length && <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-medium text-[var(--text-secondary)]">Tool calls ({row.tool_calls?.length ?? 0})</span>
+            <CodeBlock code={JSON.stringify(row.tool_calls ?? [], null, 2)} language="json" collapseAfterLines={20} />
+          </div>}
+
           <div className="flex flex-col gap-2">
             <span className="text-[13px] font-medium text-[var(--text-secondary)]">Grades</span>
             {row.grades.length === 0 ? (
@@ -111,7 +124,7 @@ export function RunCaseDrawer({
                 {row.grades.map((g) => (
                   <div key={g.grader_name} className="rounded-lg border border-[var(--border-subtle)] p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[13px] font-medium text-[var(--text-primary)]">{g.grader_name}</span>
+                      <span className="text-[13px] font-medium text-[var(--text-primary)]">{g.grader_name}{g.details._gating ? ' (gate)' : ''}</span>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[11px] text-[var(--text-tertiary)]">weight {g.weight}</span>
                         <ScoreBadge score={g.score} size="sm" />

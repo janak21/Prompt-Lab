@@ -297,7 +297,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         </SubSection>
 
         <SubSection id="concept-graders" title="Graders">
-          <P>A grader is a check attached to a prompt (not a dataset) that scores each output 0–10. Five types exist, and each has real limits worth knowing before you trust its number:</P>
+          <P>A grader is a check attached to a prompt (not a dataset) that scores each output 0–10. Six types exist, and each has real limits worth knowing before you trust its number:</P>
           <UL>
             <LI>
               <Strong>llm_judge</Strong> — another model reads the output (and, if enabled, the case&rsquo;s{' '}
@@ -332,10 +332,23 @@ export const GUIDE_SECTIONS: GuideSection[] = [
               against ceilings you set; 10 if every configured ceiling holds, 0 if the case exceeds any of them. Says nothing
               about output quality — pair it with another grader, don&rsquo;t use it alone.
             </LI>
+            <LI>
+              <Strong>tool_calls</Strong> — checks every tool attempt across a scripted conversation.
+              Require a named tool never be called, or require at least one valid call with the specified
+              argument values. Binary 0/10 and usable as a gate. It does not check call order.
+            </LI>
           </UL>
         </SubSection>
 
         <SubSection id="concept-scoring" title="Weights & scoring">
+          <P>
+            Enable <Strong>Gating</Strong> in a grader to enforce a hard rule independently of weights.
+            String Match requires every constraint to hold; Code Syntax, JSON Schema, Budget, and Tool Calls
+            require score 10. LLM Judge uses its Pass threshold (default 8.0). A failed scored gate marks the case
+            failed while keeping the weighted score. Skipped or errored gates are inconclusive.
+            Pass rate counts passing cases divided by all cases, including failures and inconclusive results.
+            With no gates, successful execution passes. Results and Compare show pass rate beside the average.
+          </P>
           <P>
             Each grader on a prompt has a <Strong>weight</Strong>. A case&rsquo;s final score is the weighted average
             of its graders&rsquo; scores, normalized: two graders weighted 2 and 1 contribute roughly 67% and 33% to
@@ -361,6 +374,25 @@ export const GUIDE_SECTIONS: GuideSection[] = [
 
         <SubSection id="concept-run" title="Run">
           <P>
+            For CI, use <Term>uv run promptlab run --prompt NAME --dataset NAME --fail-under 8
+            --require-pass-rate 1 --json report.json</Term>. Add --version N to pin a version; otherwise the
+            latest is used. Names match exactly, or use ids. PROMPTLAB_DB selects your saved database.
+            The default required pass rate is 100%; lower it explicitly to allow some gate failures.
+            Execution errors, inconclusive gates, or unmet thresholds exit non-zero.
+          </P>
+          <P>
+            For agent tests, Add case accepts a JSON array of up to 20 user-turn strings in Conversation.
+            Empty [] keeps single-output behavior. The rendered template prefixes the first turn;
+            subsequent turns are literal. On the dataset page, Mock tools accepts a JSON array of tools with
+            name, an object input_schema, and a canned response. Tools are snapshotted when a run launches.
+            The case drawer shows the full transcript and every call, including text written alongside calls.
+            Add a Tool Calls grader to require a tool never be called, or require argument values, and use it
+            as a gate. Text graders inspect combined assistant text; the judge sees the transcript.
+            Each turn permits 8 tool rounds. Unknown tools, invalid arguments, and truncated replies fail with
+            partial evidence. This version has no real tools, stateful responses, branching, per-turn grading,
+            or conversation import/generation.
+          </P>
+          <P>
             Launching a run from <AppLink to="/runs">Runs</AppLink> picks a prompt version, a dataset, and two
             separate models: the <Strong>model</Strong> that produces the output being tested, and the{' '}
             <Strong>judge model</Strong> used only by <Term>llm_judge</Term> graders to score it — these are
@@ -375,7 +407,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           <P>
             <AppLink to="/compare">Compare</AppLink> takes two runs and lines them up case by case. Every delta —
             overall, per-grader, per-category, and per-case — is <Term>a − b</Term>, so a positive number means run A
-            scored higher. Each case is also tallied as a win for A, a win for B, or a tie. Two runs can only be
+            scored higher. Pass rate delta is shown in percentage points alongside both rates, and each
+            case shows its pass verdict. Wins and ties still compare weighted scores. Two runs can only be
             compared if they used the <Strong>same dataset</Strong> — comparing across datasets isn&rsquo;t
             meaningful (different cases, different difficulty), so PromptLab rejects it outright.
           </P>
