@@ -176,6 +176,8 @@ class RunCase(BaseModel):
 class RunSummary(BaseModel):
     """A run's headline info, without full per-case detail."""
 
+    cost_complete: bool = True
+
     id: int
     prompt_id: int
     prompt_name: str
@@ -216,6 +218,8 @@ class CategoryStat(BaseModel):
 class RunStats(BaseModel):
     """Aggregate statistics computed over a run's cases."""
 
+    cost_complete: bool = True
+
     pass_rate: float | None = None
     avg_score: float | None = None
     total_cost: float = 0.0
@@ -236,21 +240,34 @@ class RunStats(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     api_key_present: bool
+    provider_keys: dict[str, bool] = Field(default_factory=dict)
     db_path: str
     version: str
 
 
 class ModelInfo(BaseModel):
+    provider: Literal["anthropic", "openai"] = "anthropic"
+    created_at: str | None = None
+    shutdown_date: str | None = None
+    supports_effort: bool = False
     id: str
     label: str
-    input_price_per_mtok: float
-    output_price_per_mtok: float
-    context_window: int
+    input_price_per_mtok: float | None
+    output_price_per_mtok: float | None
+    context_window: int | None
     supports_prefill: bool
     supports_temperature: bool
 
 
+class ProviderInfo(BaseModel):
+    id: Literal["anthropic", "openai"]
+    key_present: bool
+    status: Literal["available", "missing_key", "error"]
+    error: str | None = None
+
+
 class ModelsResponse(BaseModel):
+    providers: list[ProviderInfo] = Field(default_factory=list)
     models: list[ModelInfo]
     default_model: str
     default_judge_model: str

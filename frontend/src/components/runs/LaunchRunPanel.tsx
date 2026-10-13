@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge, Button, Input, Select, Slider, toast } from '@/components/ui'
 import { useSubmitShortcut } from '@/hooks/useEscapeKey'
+import { effectiveRunModel } from '@/lib/modelSelection'
 import { api, ApiError, getFieldError } from '@/lib/api'
 import type { Dataset, Grader, ModelInfo, Prompt, PromptVersion } from '@/lib/types'
 
@@ -61,13 +62,14 @@ export function LaunchRunPanel({
 
   const selectedVersion = versions?.find((v) => v.id === versionId) ?? null
   const selectedDataset = datasets.find((d) => d.id === datasetId) ?? null
+  const resolvedModel = effectiveRunModel(model, selectedVersion?.model, defaultModel, models)
 
   const missingVariables = useMemo(() => {
     if (!selectedVersion || !selectedDataset) return []
     return selectedVersion.variables.filter((v) => !selectedDataset.variables.includes(v))
   }, [selectedVersion, selectedDataset])
 
-  const canSubmit = !!promptId && !!versionId && !!datasetId && missingVariables.length === 0 && !submitting
+  const canSubmit = models.length > 0 && !!promptId && !!versionId && !!datasetId && missingVariables.length === 0 && !submitting
 
   const submit = async () => {
     if (!canSubmit || !versionId || !datasetId) return
@@ -78,10 +80,10 @@ export function LaunchRunPanel({
       const res = await api.createRun({
         prompt_version_id: Number(versionId),
         dataset_id: Number(datasetId),
-        model: model || undefined,
+        model: resolvedModel || undefined,
         temperature,
         max_tokens: maxTokens,
-        judge_model: judgeModel || undefined,
+        judge_model: judgeModel || defaultJudgeModel || undefined,
         concurrency,
       })
       toast.success('Run launched', `Run #${res.run_id} is starting.`)
@@ -167,7 +169,7 @@ export function LaunchRunPanel({
         <Select
           label="Model"
           options={models.map((m) => ({ value: m.id, label: m.label }))}
-          placeholder={`Default (${defaultModel})`}
+          placeholder={resolvedModel ? 'Effective (' + resolvedModel + ')' : 'Configure a key in Settings'}
           value={model}
           onChange={(e) => setModel(e.target.value)}
         />
@@ -181,10 +183,11 @@ export function LaunchRunPanel({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Slider label="Temperature" value={temperature} onChange={setTemperature} min={0} max={1} step={0.05} formatValue={(v) => v.toFixed(2)} />
+        <Slider disabled={!models.find((m) => m.id === resolvedModel)?.supports_temperature} label="Temperature" value={temperature} onChange={setTemperature} min={0} max={1} step={0.05} formatValue={(v) => v.toFixed(2)} />
         <Input label="Max tokens" type="number" min={1} mono value={maxTokens} onChange={(e) => setMaxTokens(Number(e.target.value))} />
       </div>
 
+      <p className="text-[12px] text-[var(--text-tertiary)]">Run and judge models can use different providers. Temperature is omitted unless supported by the selected model.</p>
       <Input
         label="Concurrency"
         type="number"

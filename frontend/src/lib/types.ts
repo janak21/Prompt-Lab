@@ -176,6 +176,7 @@ export interface RunCase {
 }
 
 export interface RunSummary {
+  cost_complete?: boolean
   id: number
   prompt_id: number
   prompt_name: string
@@ -200,6 +201,7 @@ export interface RunSummary {
 }
 
 export interface RunStats {
+  cost_complete?: boolean
   pass_rate?: number | null
   avg_score: number | null
   total_cost: number
@@ -219,18 +221,27 @@ export interface RunStats {
 export interface HealthResponse {
   status: 'ok'
   api_key_present: boolean
+  provider_keys?: Record<string, boolean>
   db_path: string
   version: string
 }
 
 export interface ModelInfo {
+  provider?: 'anthropic' | 'openai'
+  created_at?: string | null
+  shutdown_date?: string | null
+  context_window?: number | null
+  supports_temperature?: boolean
+  supports_prefill?: boolean
+  supports_effort?: boolean
   id: string
   label: string
-  input_price_per_mtok: number
-  output_price_per_mtok: number
+  input_price_per_mtok: number | null
+  output_price_per_mtok: number | null
 }
 
 export interface ModelsResponse {
+  providers?: Array<{ id: 'anthropic' | 'openai'; key_present: boolean; status: 'available' | 'missing_key' | 'error'; error?: string | null }>
   models: ModelInfo[]
   default_model: string
   default_judge_model: string

@@ -256,6 +256,13 @@ async def _process_case(
             cost=result.cost_usd,
         )
 
+        if result.stop_reason == "max_tokens":
+            error = "Evaluation response was truncated by max_tokens."
+            models.update_run_case(run_case_id, status="failed", passed=False, error=error)
+            await EVENT_BUS.publish(run_id, "case_failed", {"run_case_id": run_case_id, "idx": idx, "error": error})
+            await _bump_progress(run_id, progress, progress_lock, failed=True)
+            return
+
         try:
             grades = await _grade_case(
                 run_case_id,

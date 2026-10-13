@@ -37,18 +37,36 @@ union of `inputs` keys for a dataset.
 ---
 
 ## Meta
-- `GET  /api/health` -> `{ status:"ok", api_key_present: bool, db_path, version }`
-- `GET  /api/models` -> `{ models: [{id,label,input_price_per_mtok,output_price_per_mtok}],
-                           default_model, default_judge_model }`
-  Ship exactly these, with a `supports_prefill` capability flag on each:
+- `GET  /api/health` -> `{ status:"ok", api_key_present: bool, db_path, version, provider_keys: {anthropic: bool, openai: bool} }`
+- GET /api/models?refresh=true -> {models: ModelInfo[], providers: ProviderInfo[],
+                                  default_model, default_judge_model}
+  Models are discovered with ANTHROPIC_API_KEY / OPENAI_API_KEY using each provider's
+  Models API. Both keys resolve independently from env / parent .env files. The UI
+  accepts no keys. Discovery is cached in memory for five minutes, scoped to the
+  configured credentials; refresh=true bypasses the cache. One provider's failure
+  does not remove another's models. Missing keys produce an empty list for that provider.
+  Upstream error bodies are never returned.
 
-  | id | label | in $/Mtok | out $/Mtok | supports_prefill | supports_temperature |
-  |---|---|---|---|---|---|
-  | `claude-opus-5`    | Claude Opus 5   | 5.00 | 25.00 | **false** | **false** |
-  | `claude-sonnet-5`  | Claude Sonnet 5 | 3.00 | 15.00 | **false** | **false** |
-  | `claude-haiku-4-5` | Claude Haiku 4.5| 1.00 |  5.00 | true | true |
+  ModelInfo = {id, provider: "anthropic"|"openai", label, created_at, shutdown_date,
+               input_price_per_mtok: number|null, output_price_per_mtok: number|null,
+               context_window: number|null, supports_prefill, supports_temperature,
+               supports_effort}.
+  ProviderInfo = {id, key_present: bool, status: "available"|"missing_key"|"error", error}.
+  Models are newest first by creation date. OpenAI text candidates are filtered by
+  family name because its list lacks endpoint capabilities. Listed does not guarantee
+  Responses/structured-output compatibility or account inference permission.
+  Expired shutdown_date entries are excluded.
 
-  Defaults: run model `claude-haiku-4-5`, judge model `claude-sonnet-5`.
+  A configured default is used only when present in the discovered list; otherwise
+  choose the newest Anthropic model (or newest OpenAI model if only OpenAI is available).
+  Empty lists return empty default identifiers. Explicit saved version models remain
+  unchanged; old/retired versions can be run with a model override.
+
+  OpenAI selections use openai:MODEL_ID; existing bare claude-* ids remain Anthropic.
+  Explicit anthropic:MODEL_ID and bare GPT/o-series ids are also accepted. Run and
+  judge provider selection is independent, including each grader's judge_model override.
+  Unknown prices/context limits are null. Optional sampling/effort knobs are omitted
+  when unsupported or unknown. The local pricing table does not define availability.
 
 ## Prompts
 - `GET    /api/prompts` -> `Prompt[]`
@@ -244,3 +262,19 @@ get all assistant text joined by newlines, and budget gets total model-call metr
 Not covered: rule-based/stateful responses, real or server tools, within-turn streaming,
 branching simulators, per-turn grading, tool-order assertions, and conversation
 import/generation. Use case/dataset CRUD or the UI to author scripts.
+
+
+## OpenAI execution
+
+OpenAI uses POST /v1/responses with store=false and structured output text.format
+(type=json_schema, strict=true) for judging/generation. Tools use function definitions
+with strict=false to preserve user-authored mock schemas. Function calls/results are
+normalized for the existing runner; native output items and encrypted reasoning are
+retained in transcript assistant messages as provider_content and replayed verbatim.
+The same four-attempt retry policy handles 429/5xx/transport errors. Provider error
+bodies are sanitized. Truncated single-output responses also fail before grading.
+
+RunStats and RunSummary include cost_complete (boolean). Unknown case prices yield
+cost=null; total_cost is the sum of known costs only and is incomplete when this flag
+is false. Cost budgets fail rather than treating unknown prices as free. API keys
+never appear in discovery, reports, stored transcripts or error messages.

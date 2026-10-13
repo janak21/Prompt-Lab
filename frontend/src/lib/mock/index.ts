@@ -54,7 +54,7 @@ function notFound(what: string): never {
 async function getHealth(): Promise<HealthResponse> {
   return delay({ status: 'ok', api_key_present: true, db_path: 'promptlab.db (mock)', version: 'mock' })
 }
-async function getModels(): Promise<ModelsResponse> {
+async function getModels(_refresh = false): Promise<ModelsResponse> {
   return delay({ models: MODELS, default_model: DEFAULT_MODEL, default_judge_model: DEFAULT_JUDGE_MODEL })
 }
 

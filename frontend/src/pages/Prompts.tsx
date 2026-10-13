@@ -253,7 +253,7 @@ function CreatePromptDialog({
             placeholder={models ? undefined : 'Loading…'}
             disabled={!models}
           />
-          <Slider label="Temperature" value={temperature} onChange={setTemperature} min={0} max={1} step={0.05} formatValue={(v) => v.toFixed(2)} />
+          <Slider disabled={!models?.find((m) => m.id === model)?.supports_temperature} label="Temperature" value={temperature} onChange={setTemperature} min={0} max={1} step={0.05} formatValue={(v) => v.toFixed(2)} />
           <Input
             label="Max tokens"
             type="number"

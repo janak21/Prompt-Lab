@@ -172,6 +172,7 @@ export function PromptDetailPage() {
                 disabled={!models}
               />
               <Slider
+                disabled={!models?.find((m) => m.id === draft.model)?.supports_temperature}
                 label="Temperature"
                 value={draft.temperature}
                 onChange={(v) => setDraft({ ...draft, temperature: v })}

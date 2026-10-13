@@ -16,7 +16,8 @@ from . import db, models
 from .config import settings
 from .eval import runner
 from .eval.scoring import compute_passed
-from .llm import AnthropicLLM, LLMClient
+from .llm import LLMClient
+from .providers import ProviderLLM, resolve_run_models
 from .routers.runs import get_run_detail, prepare_run
 from .schemas import RunCreate
 
@@ -46,8 +47,11 @@ async def _run(args: argparse.Namespace, llm: LLMClient | None) -> int:
         raise ValueError("Prompt version not found.")
     if not models.list_test_cases(dataset["id"]):
         raise ValueError("Dataset has no cases.")
-    client = llm if llm is not None else AnthropicLLM(api_key=settings.anthropic_api_key)
-    run = prepare_run(RunCreate(prompt_version_id=version["id"], dataset_id=dataset["id"]))
+    client = llm if llm is not None else ProviderLLM()
+    body = RunCreate(prompt_version_id=version["id"], dataset_id=dataset["id"], model=args.model, judge_model=args.judge_model)
+    if isinstance(client, ProviderLLM):
+        body = await resolve_run_models(body)
+    run = prepare_run(body)
     await runner.run_evaluation(run["id"], client)
     report = get_run_detail(run["id"]).model_dump(mode="json")
     if args.json_report:
@@ -88,6 +92,8 @@ def main(argv: list[str] | None = None, *, llm: LLMClient | None = None) -> int:
     run = subcommands.add_parser("run", help="Evaluate a saved prompt against a saved dataset")
     run.add_argument("--prompt", required=True)
     run.add_argument("--version", type=int)
+    run.add_argument("--model", help="Run model, e.g. openai:MODEL_ID")
+    run.add_argument("--judge-model", help="Judge model from either provider")
     run.add_argument("--dataset", required=True)
     run.add_argument("--fail-under", type=lambda v: _bounded_float(v, 10.0))
     run.add_argument("--require-pass-rate", type=lambda v: _bounded_float(v, 1.0), default=1.0)

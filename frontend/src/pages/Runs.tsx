@@ -66,7 +66,7 @@ export function RunsPage() {
       sortValue: (r) => r.total,
       render: (r) => `${r.completed}/${r.total}${r.failed ? ` (${r.failed} failed)` : ''}`,
     },
-    { key: 'cost', header: 'Cost', align: 'right', mono: true, sortValue: (r) => r.total_cost ?? -1, render: (r) => fmtCost(r.total_cost) },
+    { key: 'cost', header: 'Cost', align: 'right', mono: true, sortValue: (r) => r.total_cost ?? -1, render: (r) => r.cost_complete === false ? 'Unknown / incomplete' : fmtCost(r.total_cost) },
     { key: 'when', header: 'When', align: 'right', mono: true, sortValue: (r) => r.created_at, render: (r) => fmtDate(r.created_at) },
   ]
 

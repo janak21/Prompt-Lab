@@ -14,7 +14,7 @@ weak against, not just a single average score.
 
 - [`uv`](https://docs.astral.sh/uv/)
 - Node.js and npm
-- An Anthropic API key, to run prompts, generate datasets, or grade with an LLM judge
+- An Anthropic and/or OpenAI API key, to run prompts, generate datasets, or grade with an LLM judge
 
 ## Quick start
 
@@ -33,12 +33,51 @@ touches your own data.
 
 ### API key
 
-Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY`, either in this directory or in any
+Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`, in this directory or any
 parent directory — the backend walks up the directory tree looking for one, which is convenient
 if you keep a single shared `.env` above several projects. The key is read from the environment
 only: it's never stored in the database, never returned by any API response, and never logged.
 If no key resolves, `run.sh` prints a warning and starts anyway, so you can still explore the UI
 — runs and generation fail until you set a key.
+
+## Provider models and independent judges
+
+Settings lists the models returned by each configured key's provider, with provider
+labels and creation dates, newest first. **Refresh models** bypasses the five-minute
+in-memory cache. A provider outage or invalid key is shown separately and does not
+hide the other provider's models. Without keys, the list is empty; the UI still opens.
+
+Choose a run Model and Judge model independently, including Anthropic output with an
+OpenAI judge, or the reverse. LLM Judge's per-grader model override also supports either
+provider. OpenAI model selections are stored as openai:MODEL_ID; existing bare Claude
+ids keep working. Previously saved prompt versions retain their selected model; choose
+an available override when an old model has been retired.
+
+The CLI has --model and --judge-model overrides too:
+
+```bash
+uv run promptlab run --prompt "Support" --dataset "Tickets" \
+  --model "claude-your-available-model" --judge-model "openai:your-available-model" \
+  --fail-under 8 --require-pass-rate 1 --json report.json
+```
+
+Provider model lists describe account-visible models, not a guarantee of inference
+permissions or every endpoint capability. OpenAI's list is filtered to text candidates
+(excluding known audio, image, embedding, search, and legacy-only families); some
+listed models may still reject Responses or structured outputs. Creation date ordering
+does not rank model quality. Provider aliases can change; choose a dated model id when
+reproducibility matters.
+
+Anthropic uses Messages; OpenAI uses Responses with structured JSON for graders and
+generation, plus function calls for scripted conversations. OpenAI responses use
+store=false and replay native output/ encrypted reasoning locally. Temperature is
+omitted unless its support is known. Keys stay in the server environment and are never
+accepted by the UI or saved in SQLite. Restart after changing credentials.
+
+Model-list endpoints do not supply token prices. Known local estimates are shown;
+other prices and case costs are **unknown**, and run totals/deltas are marked
+incomplete. A cost budget cannot pass on an unknown estimate. Token and latency
+budgets remain available. The local price table is not the source of model availability.
 
 ## The core loop
 
@@ -114,7 +153,7 @@ demo fixture without model calls; replace it with your own fixture setup for rea
     path: report.json
 ```
 
-Actual evaluations call Anthropic and incur normal API costs. The report never contains
+Actual evaluations call the selected providers and incur normal API costs. The report never contains
 the API key.
 
 ## Scripted conversations and mock tools
@@ -152,8 +191,7 @@ POST/PATCH as a tools array):
 ]
 ```
 
-Tool definitions and responses are snapshotted at launch. The runner sends structured
-Anthropic tool definitions, preserves the full assistant content, supplies a tool_result
+Tool definitions and responses are snapshotted at launch. The runner sends provider tool definitions, preserves the full assistant content, supplies a tool result
 for each call, and resumes until that turn ends before sending the next scripted user
 turn. Text accompanying a tool call stays in the reply. No mock executes real actions.
 Unknown tools, schema-invalid arguments, truncated replies, and loop exhaustion fail

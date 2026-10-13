@@ -188,11 +188,12 @@ class LLMResult:
     text: str
     input_tokens: int
     output_tokens: int
-    cost_usd: float
+    cost_usd: float | None
     latency_ms: int
     model: str
     content: list[dict[str, Any]] | None = None
     stop_reason: str | None = None
+    provider_content: list[dict[str, Any]] | None = None
 
 
 class LLMClient(ABC):
@@ -418,7 +419,7 @@ class AnthropicLLM(LLMClient):
 
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
-        cost_usd = compute_cost(model, input_tokens, output_tokens)
+        cost_usd = compute_cost(model, input_tokens, output_tokens) if pricing.get_price(model) else None
 
         return LLMResult(
             text=text,

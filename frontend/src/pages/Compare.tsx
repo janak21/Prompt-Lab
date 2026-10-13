@@ -202,8 +202,8 @@ export function ComparePage() {
             />
             <MetricTile
               label="Cost delta"
-              value={<span style={{ color: result.deltas.total_cost > 0 ? 'var(--score-low)' : 'var(--score-high)' }}>{fmtCost(result.deltas.total_cost)}</span>}
-              sub={`A $${result.a.stats.total_cost.toFixed(4)} · B $${result.b.stats.total_cost.toFixed(4)}`}
+              value={result.a.stats.cost_complete === false || result.b.stats.cost_complete === false ? 'Unknown / incomplete' : <span style={{ color: result.deltas.total_cost > 0 ? 'var(--score-low)' : 'var(--score-high)' }}>{fmtCost(result.deltas.total_cost)}</span>}
+              sub={'A ' + (result.a.stats.cost_complete === false ? 'unknown' : '$' + result.a.stats.total_cost.toFixed(4)) + ' · B ' + (result.b.stats.cost_complete === false ? 'unknown' : '$' + result.b.stats.total_cost.toFixed(4))}
             />
             <MetricTile label="Wins A" value={<span style={{ color: 'var(--win)' }}>{result.wins.a}</span>} />
             <MetricTile label="Wins B / Ties" value={<span>{result.wins.b} <span className="text-[var(--text-tertiary)]">/ {result.wins.tie}</span></span>} />

@@ -135,3 +135,22 @@ UNIQUE(prompt_id, version_no)
    Tools are canned dataset mocks, used only for non-empty conversations. No real
    tool code executes. Text graders inspect all assistant text joined with newlines;
    llm_judge inspects the transcript; budget uses total execution metrics.
+
+
+## Provider identifiers and unknown costs
+
+No provider-specific columns or credentials are added. prompt_version.model, run.model,
+run.judge_model and snapshotted grader config.judge_model hold the selected identifiers.
+Existing bare claude-* ids route to Anthropic; new OpenAI selections use openai:MODEL_ID.
+Run and judge models can select different providers. Defaults for new runs resolve from
+account-visible discovery; saved immutable version selections are not rewritten.
+
+Model catalogs and provider status are cached in memory only. Keys are environment-only
+and resolved independently for both providers; keys are never written to SQLite.
+OpenAI native output items, including encrypted reasoning needed to resume a tool call,
+are persisted in transcript assistant messages as provider_content.
+
+Unknown token prices produce NULL run_case.cost. RunSummary/RunStats.cost_complete is
+derived from terminal cases; total_cost sums known estimates and must be displayed as
+incomplete if any terminal case lacks a cost. A cost-ceiling grader cannot pass without
+a cost estimate. Unknown does not mean free.

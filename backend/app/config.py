@@ -1,7 +1,7 @@
 """Application configuration.
 
 Settings are resolved once at import time via a module-level ``settings`` singleton
-(see bottom of file). The Anthropic API key is NEVER read from request bodies, never
+(see bottom of file). Provider API keys is NEVER read from request bodies, never
 logged, and never exposed by any endpoint -- only its *presence* is reported (see
 ``/api/health``).
 
@@ -20,7 +20,8 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import dotenv_values
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/config.py -> parents[2] is the promptlab/ project root.
@@ -28,26 +29,34 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _find_and_load_env() -> None:
-    """Populate ``os.environ`` with ``ANTHROPIC_API_KEY`` if it isn't already set.
+    """Resolve provider keys independently from env / nearest parent .env files.
 
-    Walks up from ``PROJECT_ROOT`` (inclusive) through every parent directory,
-    loading the first ``.env`` file encountered that actually defines the key.
-    Does nothing if the key is already present in the environment -- an
-    already-set env var always takes precedence.
+    Explicitly exported values win, including empty values. Other .env settings
+    retain the same nearest-file precedence without mixing provider credentials.
     """
     import os
 
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return
-
+    credential_names = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+    # Preserve .env settings as well as independently resolved credentials. Nearest
+    # files win; an explicitly exported environment value always takes precedence.
     for directory in [PROJECT_ROOT, *PROJECT_ROOT.parents]:
         candidate = directory / ".env"
-        if not candidate.is_file():
+        if candidate.is_file():
+            for name, value in dotenv_values(candidate).items():
+                if name not in credential_names and value is not None:
+                    os.environ.setdefault(name, value)
+    for key_name in credential_names:
+        if key_name in os.environ:
             continue
-        values = dotenv_values(candidate)
-        if values.get("ANTHROPIC_API_KEY"):
-            load_dotenv(candidate, override=False)
-            return
+        for directory in [PROJECT_ROOT, *PROJECT_ROOT.parents]:
+            candidate = directory / ".env"
+            if candidate.is_file():
+                values = dotenv_values(candidate)
+                if values.get(key_name):
+                    # Load only this credential; a nearer provider's .env must not
+                    # prevent resolving the other provider from a parent directory.
+                    os.environ[key_name] = values[key_name]
+                    break
 
 
 _find_and_load_env()
@@ -63,7 +72,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    anthropic_api_key: str | None = None
+    anthropic_api_key: str | None = Field(default=None, repr=False)
+    openai_api_key: str | None = Field(default=None, repr=False)
 
     promptlab_db: str = "promptlab/promptlab.db"
 
@@ -94,7 +104,7 @@ def get_settings() -> Settings:
     """Return the process-wide cached :class:`Settings` instance."""
     import os
 
-    return Settings(anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    return Settings(anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"), openai_api_key=os.environ.get("OPENAI_API_KEY"))
 
 
 settings = get_settings()

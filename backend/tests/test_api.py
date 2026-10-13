@@ -37,6 +37,18 @@ class TestHealth:
 
 
 class TestModels:
+    @pytest.fixture(autouse=True)
+    def provider_models(self, monkeypatch):
+        from backend.app import model_catalog
+        from backend.app.config import settings
+        from backend.app.pricing import PRICES
+
+        async def listed(provider, key):
+            return [{"id": id, "display_name": price.label, "created_at": "2026-01-01T00:00:00Z"} for id, price in PRICES.items()]
+
+        monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
+        monkeypatch.setattr(model_catalog, "_list_models", listed)
+
     async def test_lists_required_models(self, client: httpx.AsyncClient) -> None:
         resp = await client.get("/api/models")
         assert resp.status_code == 200
