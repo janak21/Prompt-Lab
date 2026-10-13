@@ -25,3 +25,13 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(settings, "promptlab_db", str(db_path))
     db_module.init_db()
     return db_path
+
+
+@pytest.fixture(autouse=True)
+def offline_providers(monkeypatch):
+    """Keep discovery offline regardless of the developer's environment."""
+    from backend.app import model_catalog, pricing
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
+    monkeypatch.setattr(model_catalog, "_cache", None)
+    monkeypatch.setattr(pricing, "DISCOVERED_CAPABILITIES", {})

@@ -19,9 +19,9 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .config import settings
-from .pricing import PRICES
+from .model_catalog import discover_models
 from .routers import datasets, graders, prompts
-from .schemas import HealthResponse, ModelInfo, ModelsResponse
+from .schemas import HealthResponse, ModelsResponse
 
 try:
     from backend.app.routers import runs
@@ -63,38 +63,17 @@ def health() -> HealthResponse:
     """Report process health, API-key presence (boolean only -- never the key itself), and DB path."""
     return HealthResponse(
         status="ok",
-        api_key_present=bool(settings.anthropic_api_key),
+        api_key_present=bool(settings.anthropic_api_key or settings.openai_api_key),
+        provider_keys={"anthropic": bool(settings.anthropic_api_key), "openai": bool(settings.openai_api_key)},
         db_path=str(settings.db_path()),
         version=APP_VERSION,
     )
 
 
 @app.get("/api/models", response_model=ModelsResponse)
-def models() -> ModelsResponse:
-    """List available models with pricing, capabilities, and the configured defaults."""
-    # Enumerated rather than unpacked from `price._asdict()`: ModelPrice and ModelInfo
-    # field names diverge (input_per_mtok/output_per_mtok vs. *_price_per_mtok, plus
-    # `id` which only exists as the PRICES dict key) -- unpacking would silently drop
-    # or misname fields rather than fail loudly. Every ModelPrice capability flag
-    # (label, context_window, supports_prefill, supports_temperature, ...) still needs
-    # to be listed here explicitly; add new ones as they land in pricing.py.
-    model_infos = [
-        ModelInfo(
-            id=model_id,
-            label=price.label,
-            input_price_per_mtok=price.input_per_mtok,
-            output_price_per_mtok=price.output_per_mtok,
-            context_window=price.context_window,
-            supports_prefill=price.supports_prefill,
-            supports_temperature=price.supports_temperature,
-        )
-        for model_id, price in PRICES.items()
-    ]
-    return ModelsResponse(
-        models=model_infos,
-        default_model=settings.default_model,
-        default_judge_model=settings.default_judge_model,
-    )
+async def models(refresh: bool = False) -> ModelsResponse:
+    """List models visible to configured provider keys, with isolated provider errors."""
+    return await discover_models(refresh=refresh)
 
 
 # --------------------------------------------------------------------------

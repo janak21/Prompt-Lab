@@ -25,7 +25,8 @@ from .. import models, templating
 from ..config import settings
 from ..eval import runner
 from ..eval.scoring import build_run_stats
-from ..llm import AnthropicLLM, LLMClient
+from ..llm import LLMClient
+from ..providers import ProviderLLM, resolve_run_models
 from ..schemas import (
     CategoryStat,
     CompareCase,
@@ -61,7 +62,7 @@ def get_llm_client() -> LLMClient:
     fake_llm``) to inject :class:`backend.app.llm.FakeLLM` and guarantee no real
     network call is ever made.
     """
-    return AnthropicLLM(api_key=settings.anthropic_api_key)
+    return ProviderLLM()
 
 
 # --------------------------------------------------------------------------
@@ -105,6 +106,7 @@ def _build_run_summary(run: dict[str, Any]) -> RunSummary:
         status=run["status"],
         avg_score=run["avg_score"],
         pass_rate=build_run_stats(cases)["pass_rate"],
+        cost_complete=build_run_stats(cases)["cost_complete"],
         total_cost=run["total_cost"],
         total=len(cases),
         completed=completed,
@@ -170,6 +172,7 @@ def _stats_to_pydantic(stats: dict[str, Any]) -> RunStats:
         avg_score=stats["avg_score"],
         pass_rate=stats["pass_rate"],
         total_cost=stats["total_cost"],
+        cost_complete=stats["cost_complete"],
         total_latency_ms=stats["total_latency_ms"],
         total=stats["total"],
         completed=stats["completed"],
@@ -252,6 +255,11 @@ async def create_run(
     """Launch a new evaluation run. Execution happens in a background task; the
     client is expected to immediately open the SSE stream at
     ``GET /api/runs/{id}/events`` to watch progress."""
+    if isinstance(llm, ProviderLLM):
+        try:
+            body = await resolve_run_models(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     run = prepare_run(body)
 
     background_tasks.add_task(runner.run_evaluation, run["id"], llm)

@@ -159,6 +159,7 @@ def build_run_stats(run_cases: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_score": avg_score,
         "pass_rate": sum(bool(c.get("passed", c.get("status") == "completed")) for c in run_cases) / total if total else None,
         "total_cost": total_cost,
+        "cost_complete": all(c.get("cost") is not None for c in run_cases if c.get("status") in ("completed", "failed")),
         "total_latency_ms": total_latency_ms,
         "total": total,
         "completed": completed,

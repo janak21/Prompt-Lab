@@ -18,7 +18,9 @@ from .. import models
 from ..config import settings
 from ..eval import importers
 from ..eval.generation import generate_cases
-from ..llm import AnthropicLLM, LLMClient
+from ..llm import LLMClient
+from ..providers import ProviderLLM
+from ..model_catalog import discover_models
 from .graders import http_422_from_validation_error
 from ..schemas import (
     Dataset,
@@ -49,7 +51,7 @@ def get_llm_client() -> LLMClient:
     """
     global _llm_client
     if _llm_client is None:
-        _llm_client = AnthropicLLM(settings.anthropic_api_key)
+        _llm_client = ProviderLLM()
     return _llm_client
 
 
@@ -205,6 +207,10 @@ async def generate_dataset(body: GenerateDatasetRequest) -> GenerateDatasetRespo
         dataset_row = models.create_dataset(body.name, source="generated")
 
     model = body.model or settings.default_model
+    if body.model is None and isinstance(get_llm_client(), ProviderLLM):
+        model = (await discover_models()).default_model
+        if not model:
+            raise HTTPException(status_code=422, detail="No models available. Configure a provider key and refresh Settings.")
     result = await generate_cases(
         get_llm_client(),
         domain_description=body.domain_description,

@@ -372,7 +372,7 @@ export function RunDetailPage() {
         <MetricTile label="Average score" value={localStats.avg_score != null ? <ScoreBadge score={localStats.avg_score} size="lg" /> : '—'} />
         <MetricTile label="Completed" value={run.completed || progress.completed} />
         <MetricTile label="Failed" value={run.failed || progress.failed} />
-        <MetricTile label="Total cost" value={fmtCost(run.total_cost ?? null)} />
+        <MetricTile label="Total cost" value={rows.some((r) => (r.status === 'completed' || r.status === 'failed') && r.cost == null) ? 'Unknown / incomplete' : fmtCost(run.total_cost ?? null)} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">

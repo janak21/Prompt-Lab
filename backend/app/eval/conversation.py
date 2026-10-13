@@ -54,9 +54,12 @@ async def run_conversation(
             input_tokens += result.input_tokens
             output_tokens += result.output_tokens
             latency_ms += result.latency_ms
-            cost += result.cost_usd
+            cost = cost + result.cost_usd if cost is not None and result.cost_usd is not None else None
             content = result.content or [{"type": "text", "text": result.text}]
-            messages.append({"role": "assistant", "content": content})
+            assistant = {"role": "assistant", "content": content}
+            if result.provider_content is not None:
+                assistant["provider_content"] = result.provider_content
+            messages.append(assistant)
             replies.extend(block["text"] for block in content if block["type"] == "text")
             pending = [block for block in content if block["type"] == "tool_use"]
             attempts = [{"id": block["id"], "name": block["name"], "input": block["input"], "turn": turn_idx + 1} for block in pending]

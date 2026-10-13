@@ -75,42 +75,20 @@ uv sync
 # --------------------------------------------------------------------------
 # API key status -- report BEFORE starting anything, but never block startup.
 # Mirrors backend/app/config.py's resolution order: env var, else walk up
-# looking for a .env defining ANTHROPIC_API_KEY.
+# looking for provider credentials in .env.
 # --------------------------------------------------------------------------
 check_api_key() {
-    # Mirrors backend/app/config.py's resolution exactly: if ANTHROPIC_API_KEY is
-    # already set in the process environment -- even to an empty string -- that value
-    # wins outright and python-dotenv will NOT fall back to a .env file (dotenv never
-    # overrides an already-set env var). So an exported-but-blank key must NOT fall
-    # through to the .env search below, or this check would report "found" while the
-    # app itself resolves to no key.
-    if [ "${ANTHROPIC_API_KEY+is_set}" = "is_set" ]; then
-        [ -n "$ANTHROPIC_API_KEY" ]
-        return $?
-    fi
-    local dir="$SCRIPT_DIR"
-    while true; do
-        if [ -f "$dir/.env" ] && grep -q '^ANTHROPIC_API_KEY=.\+' "$dir/.env" 2>/dev/null; then
-            return 0
-        fi
-        local parent
-        parent="$(dirname -- "$dir")"
-        if [ "$parent" = "$dir" ]; then
-            break
-        fi
-        dir="$parent"
-    done
-    return 1
+    uv run python -c 'from backend.app.config import settings; import sys; sys.exit(0 if settings.anthropic_api_key or settings.openai_api_key else 1)'
 }
 
 if check_api_key; then
-    echo "==> ANTHROPIC_API_KEY: found"
+    echo "==> Provider API key: found"
 else
     echo ""
-    echo "WARNING: No ANTHROPIC_API_KEY found in the environment or in any .env file"
+    echo "WARNING: No Anthropic or OpenAI API key found in the environment or any .env file"
     echo "         walking up from $SCRIPT_DIR."
     echo "         The UI will load, but any run/generation that calls the model WILL FAIL."
-    echo "         Fix: copy .env.example to .env and set ANTHROPIC_API_KEY=sk-ant-..."
+    echo "         Fix: copy .env.example to .env and configure ANTHROPIC_API_KEY or OPENAI_API_KEY."
     echo "         (a .env in this directory or any parent directory is picked up automatically)."
     echo ""
 fi

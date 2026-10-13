@@ -89,8 +89,8 @@ function json(body: unknown): RequestInit {
 async function getHealth(): Promise<HealthResponse> {
   return request('/health')
 }
-async function getModels(): Promise<ModelsResponse> {
-  return request('/models')
+async function getModels(refresh = false): Promise<ModelsResponse> {
+  return request(refresh ? '/models?refresh=true' : '/models')
 }
 
 // ---------------------------------------------------------------------------

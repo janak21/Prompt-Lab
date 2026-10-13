@@ -374,6 +374,20 @@ export const GUIDE_SECTIONS: GuideSection[] = [
 
         <SubSection id="concept-run" title="Run">
           <P>
+            Settings discovers models from your configured Anthropic and OpenAI keys, newest first.
+            Refresh models bypasses its five-minute cache. Set ANTHROPIC_API_KEY and/or OPENAI_API_KEY in
+            the server environment or .env, then restart; keys are never stored in the database or displayed.
+            Model availability comes from the provider, while pricing is a separate local estimate.
+            Unknown prices are shown as unknown; incomplete costs cannot pass a cost budget.
+          </P>
+          <P>
+            Choose Model and Judge model independently: for example, Anthropic output graded by OpenAI.
+            Each LLM Judge can also override its judge model. OpenAI selections use openai:MODEL_ID.
+            The CLI supports --model and --judge-model. Saved prompt versions keep their original ids;
+            override a retired model when launching a new run. A listed OpenAI model is a text candidate:
+            endpoint permissions or structured-output support can still limit it.
+          </P>
+          <P>
             For CI, use <Term>uv run promptlab run --prompt NAME --dataset NAME --fail-under 8
             --require-pass-rate 1 --json report.json</Term>. Add --version N to pin a version; otherwise the
             latest is used. Names match exactly, or use ids. PROMPTLAB_DB selects your saved database.

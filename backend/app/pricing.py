@@ -54,9 +54,11 @@ PRICES: dict[str, ModelPrice] = {
 }
 
 
+DISCOVERED_CAPABILITIES: dict[str, dict[str, bool]] = {}
+
 def cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Compute USD cost for a completion. Returns 0.0 for unknown models -- never raises."""
-    price = PRICES.get(model)
+    price = get_price(model)
     if price is None:
         return 0.0
     return (input_tokens / 1_000_000) * price.input_per_mtok + (output_tokens / 1_000_000) * price.output_per_mtok
@@ -64,7 +66,7 @@ def cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 def get_price(model: str) -> ModelPrice | None:
     """Return the :class:`ModelPrice` for a model, or None if unknown."""
-    return PRICES.get(model)
+    return PRICES.get(model.removeprefix("anthropic:"))
 
 
 def supports_prefill(model: str) -> bool:
@@ -78,7 +80,7 @@ def supports_prefill(model: str) -> bool:
     schema=...)``), which works uniformly across the whole roster and degrades safely.
     This is looked up from :data:`PRICES`, never hardcoded per-model in calling code.
     """
-    price = PRICES.get(model)
+    price = get_price(model)
     if price is None:
         return False
     return price.supports_prefill
@@ -94,7 +96,9 @@ def supports_temperature(model: str) -> bool:
     the asymmetry favors omission. This is looked up from :data:`PRICES`, never
     hardcoded per-model in calling code.
     """
-    price = PRICES.get(model)
+    if model in DISCOVERED_CAPABILITIES:
+        return DISCOVERED_CAPABILITIES[model]["temperature"]
+    price = get_price(model)
     if price is None:
         return False
     return price.supports_temperature
@@ -108,5 +112,7 @@ def supports_effort(model: str) -> bool:
     the same safe direction as :func:`supports_prefill` / :func:`supports_temperature`:
     omitting an optional tuning knob always works, sending an unsupported one is a 400.
     """
-    price = PRICES.get(model)
+    if model in DISCOVERED_CAPABILITIES:
+        return DISCOVERED_CAPABILITIES[model]["effort"]
+    price = get_price(model)
     return bool(price.supports_effort) if price else False

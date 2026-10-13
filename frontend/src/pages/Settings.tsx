@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Badge, ErrorState, Skeleton, Table } from '@/components/ui'
+import { Badge, Button, EmptyState, ErrorState, Select, Skeleton, Table } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { DEFAULT_CONCURRENCY } from '@/components/runs/LaunchRunPanel'
 import { api, ApiError } from '@/lib/api'
@@ -10,11 +10,12 @@ export function SettingsPage() {
   const [models, setModels] = useState<ModelsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = () => {
+  const [provider, setProvider] = useState('all')
+  const load = (refresh = false) => {
     setError(null)
     setHealth(null)
     setModels(null)
-    Promise.all([api.getHealth(), api.getModels()])
+    Promise.all([api.getHealth(), api.getModels(refresh)])
       .then(([h, m]) => {
         setHealth(h)
         setModels(m)
@@ -22,7 +23,7 @@ export function SettingsPage() {
       .catch((e: unknown) => setError(e instanceof ApiError ? e.message : 'Failed to load settings.'))
   }
 
-  useEffect(load, [])
+  useEffect(() => load(), [])
 
   const columns: Column<ModelInfo>[] = models
     ? [
@@ -38,36 +39,41 @@ export function SettingsPage() {
           ),
         },
         { key: 'id', header: 'ID', mono: true, render: (m) => m.id },
+        { key: 'created', header: 'Created', mono: true, render: (m) => m.created_at?.slice(0, 10) ?? '—' },
         {
           key: 'input',
           header: 'Input $ / Mtok',
           align: 'right',
           mono: true,
-          sortValue: (m) => m.input_price_per_mtok,
-          render: (m) => `$${m.input_price_per_mtok.toFixed(2)}`,
+          sortValue: (m) => m.input_price_per_mtok ?? -1,
+          render: (m) => m.input_price_per_mtok == null ? 'Unknown' : '$' + m.input_price_per_mtok.toFixed(2),
         },
         {
           key: 'output',
           header: 'Output $ / Mtok',
           align: 'right',
           mono: true,
-          sortValue: (m) => m.output_price_per_mtok,
-          render: (m) => `$${m.output_price_per_mtok.toFixed(2)}`,
+          sortValue: (m) => m.output_price_per_mtok ?? -1,
+          render: (m) => m.output_price_per_mtok == null ? 'Unknown' : '$' + m.output_price_per_mtok.toFixed(2),
         },
       ]
     : []
 
-  if (error) return <ErrorState className="m-6" message="Couldn't load settings" detail={error} onRetry={load} />
+  if (error) return <ErrorState className="m-6" message="Couldn't load settings" detail={error} onRetry={() => load()} />
 
   return (
     <div className="flex flex-col gap-6 p-6">
       <div>
         <h1 className="text-[17px] font-semibold text-[var(--text-primary)]">Settings</h1>
-        <p className="text-[13px] text-[var(--text-secondary)]">API access, defaults, and pricing.</p>
+        <p className="text-[13px] text-[var(--text-secondary)]">Provider models, defaults, and pricing estimates.</p>
       </div>
 
       <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
-        <span className="text-[13px] font-medium text-[var(--text-primary)]">API key</span>
+        <span className="text-[13px] font-medium text-[var(--text-primary)]">Provider access</span>
+        {models?.providers?.map((p) => <div key={p.id} className="flex flex-col gap-1 text-[13px]">
+          <span>{p.id === 'openai' ? 'OpenAI' : 'Anthropic'} — {p.status === 'available' ? 'Connected' : p.status === 'missing_key' ? 'No key configured' : 'Model discovery failed'}</span>
+          {p.error && <span className="text-[var(--score-low)]">{p.error}</span>}
+        </div>)}
         {!health ? (
           <Skeleton className="h-5 w-40" />
         ) : health.api_key_present ? (
@@ -82,7 +88,7 @@ export function SettingsPage() {
               <span className="text-[13px] text-[var(--score-low)]">No API key configured — runs will fail to start.</span>
             </div>
             <p className="text-[12.5px] text-[var(--text-tertiary)]">
-              Set <code className="font-mono">ANTHROPIC_API_KEY</code> in the server's environment and restart it. For
+              Set <code className="font-mono">ANTHROPIC_API_KEY</code> or <code className="font-mono">OPENAI_API_KEY</code> in the server's environment and restart it. For
               security the key is never sent to or displayed in this UI — only its presence is reported.
             </p>
           </div>
@@ -125,8 +131,13 @@ export function SettingsPage() {
       </div>
 
       <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
-        <span className="text-[13px] font-medium text-[var(--text-primary)]">Model pricing</span>
-        {!models ? <Skeleton className="h-40" /> : <Table columns={columns} rows={models.models} rowKey={(m) => m.id} />}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-[var(--text-primary)]">Available models</span>
+          <Select aria-label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)} options={[{ value: 'all', label: 'All providers' }, { value: 'anthropic', label: 'Anthropic' }, { value: 'openai', label: 'OpenAI' }]} />
+          <Button variant="outline" onClick={() => load(true)}>Refresh models</Button>
+        </div>
+        <p className="text-[12px] text-[var(--text-tertiary)]">Models visible to your configured keys, newest first. Cached for five minutes. Unknown prices are not free usage. OpenAI lists text-model candidates; endpoint permissions may still limit use.</p>
+        {!models ? <Skeleton className="h-40" /> : models.models.length === 0 ? <EmptyState title="No models available" description="Configure a provider key on the server, restart, and refresh models." action={<Button variant="outline" onClick={() => load(true)}>Refresh models</Button>} /> : <Table columns={columns} rows={models.models.filter((m) => provider === 'all' || (m.provider ?? 'anthropic') === provider)} rowKey={(m) => m.id} />}
       </div>
     </div>
   )
