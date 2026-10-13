@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Input, Select, Switch, Textarea } from '@/components/ui'
 import type { ModelInfo } from '@/lib/types'
 import type {
+  GraderConfigToolCalls,
   GraderConfigBudget,
   GraderConfigCodeSyntax,
   GraderConfigJsonSchema,
@@ -17,6 +18,7 @@ export type AnyGraderConfig =
   | GraderConfigStringMatch
   | GraderConfigJsonSchema
   | GraderConfigBudget
+  | GraderConfigToolCalls
 
 export function defaultConfigFor(type: GraderType): AnyGraderConfig {
   switch (type) {
@@ -28,6 +30,8 @@ export function defaultConfigFor(type: GraderType): AnyGraderConfig {
       return { must_contain: [], must_not_contain: [], regex: null, case_sensitive: false }
     case 'json_schema':
       return { schema: {} }
+    case 'tool_calls':
+      return { tool: '', mode: 'never_called', arguments: {} }
     case 'budget':
       return {}
   }
@@ -62,6 +66,7 @@ export function validateConfig(type: GraderType, config: AnyGraderConfig): Recor
       errors.budget = 'Set at least one ceiling, or this grader always scores 10.'
     }
   }
+  if (type === 'tool_calls' && !(config as GraderConfigToolCalls).tool.trim()) errors.tool = 'Tool name is required.'
   return errors
 }
 
@@ -76,6 +81,7 @@ export function GraderConfigFields({
   onChange: (config: AnyGraderConfig) => void
   errors?: Record<string, string>
 }) {
+  if (type === 'tool_calls') return <ToolCallsFields config={config as GraderConfigToolCalls} onChange={onChange} />
   if (type === 'llm_judge') return <LlmJudgeFields config={config as GraderConfigLlmJudge} onChange={onChange} errors={errors} />
   if (type === 'code_syntax') return <CodeSyntaxFields config={config as GraderConfigCodeSyntax} onChange={onChange} />
   if (type === 'string_match') return <StringMatchFields config={config as GraderConfigStringMatch} onChange={onChange} errors={errors} />
@@ -313,6 +319,31 @@ function BudgetFields({
         mono
       />
       {errors.budget && <span className="text-[12px] text-[var(--danger-10)]">{errors.budget}</span>}
+    </div>
+  )
+}
+
+
+function ToolCallsFields({ config, onChange }: { config: GraderConfigToolCalls; onChange: (c: GraderConfigToolCalls) => void }) {
+  const [text, setText] = useState(JSON.stringify(config.arguments ?? {}, null, 2))
+  const [error, setError] = useState('')
+  return (
+    <div className="flex flex-col gap-3">
+      <Input label="Tool name" value={config.tool} onChange={(e) => onChange({ ...config, tool: e.target.value })} mono />
+      <Select label="Assertion" value={config.mode} onChange={(e) => onChange({ ...config, mode: e.target.value as GraderConfigToolCalls['mode'] })} options={[{ value: 'never_called', label: 'Never called' }, { value: 'called_with_arguments', label: 'Called with these arguments' }]} />
+      {config.mode === 'called_with_arguments' && <Textarea label="Required arguments (JSON object)" mono minRows={4} value={text} error={error} onChange={(e) => {
+        setText(e.target.value)
+        try {
+          const argumentsValue = JSON.parse(e.target.value)
+          if (!argumentsValue || Array.isArray(argumentsValue) || typeof argumentsValue !== 'object') throw new Error('Use a JSON object.')
+          setError('')
+          onChange({ ...config, arguments: argumentsValue })
+        } catch {
+          setError('Use a valid JSON object. Saving will be rejected until corrected.')
+          // Preserve the draft as an invalid shape so the API cannot save stale arguments.
+          onChange({ ...config, arguments: e.target.value as unknown as Record<string, unknown> })
+        }
+      }} />}
     </div>
   )
 }

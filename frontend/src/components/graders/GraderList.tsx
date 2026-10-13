@@ -12,6 +12,7 @@ const TYPE_LABEL: Record<GraderType, string> = {
   string_match: 'String Match',
   json_schema: 'JSON Schema',
   budget: 'Budget',
+  tool_calls: 'Tool Calls',
 }
 
 /**
@@ -120,7 +121,7 @@ export function GraderList({ promptId }: { promptId: number }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-[13px] text-[var(--text-secondary)]">
-          Each case's final score is the weighted average of its enabled graders.
+          Scores are weighted averages. Gating graders independently decide whether a case passes.
         </p>
         <Button variant="primary" onClick={() => setAddOpen(true)}>
           Add grader
@@ -174,6 +175,7 @@ export function GraderList({ promptId }: { promptId: number }) {
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="truncate text-[13px] font-medium text-[var(--text-primary)]">{g.name}</span>
                 <Badge variant="neutral">{TYPE_LABEL[g.type]}</Badge>
+                {g.gating && <Badge variant="neutral">Gate</Badge>}
               </div>
 
               <div className="flex items-center gap-2">
@@ -248,6 +250,8 @@ function AddGraderDialog({
   onCreated: (g: Grader) => void
 }) {
   const [type, setType] = useState<GraderType>('llm_judge')
+  const [gating, setGating] = useState(false)
+  const [passThreshold, setPassThreshold] = useState(8)
   const [name, setName] = useState('LLM Judge')
   const [weight, setWeight] = useState(1)
   const [config, setConfig] = useState<AnyGraderConfig>(defaultConfigFor('llm_judge'))
@@ -259,6 +263,8 @@ function AddGraderDialog({
     setType('llm_judge')
     setName('LLM Judge')
     setWeight(1)
+    setGating(false)
+    setPassThreshold(8)
     setConfig(defaultConfigFor('llm_judge'))
     setErrors({})
   }, [open])
@@ -276,7 +282,7 @@ function AddGraderDialog({
     if (Object.keys(errs).length > 0) return
     setSubmitting(true)
     try {
-      const grader = await api.createGrader(promptId, { type, name: name.trim() || TYPE_LABEL[type], weight, config })
+      const grader = await api.createGrader(promptId, { type, name: name.trim() || TYPE_LABEL[type], weight, config, gating, pass_threshold: passThreshold })
       toast.success('Grader added', grader.name)
       onCreated(grader)
     } catch (e) {
@@ -323,6 +329,8 @@ function AddGraderDialog({
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <Input label="Weight" type="number" min={0} step={0.5} value={weight} onChange={(e) => setWeight(Number(e.target.value))} mono />
+        <Switch label="Gating — require this grader to pass" checked={gating} onChange={setGating} />
+        {gating && type === 'llm_judge' && <Input label="Pass threshold (0–10)" type="number" min={0} max={10} step={0.1} value={passThreshold} onChange={(e) => setPassThreshold(Number(e.target.value))} mono />}
         <GraderConfigFields type={type} config={config} onChange={setConfig} errors={errors} />
       </div>
     </Dialog>
@@ -339,6 +347,8 @@ function EditGraderDrawer({
   onSaved: (g: Grader) => void
 }) {
   const [config, setConfig] = useState<AnyGraderConfig>(defaultConfigFor('llm_judge'))
+  const [gating, setGating] = useState(false)
+  const [passThreshold, setPassThreshold] = useState(8)
   const [name, setName] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -347,6 +357,8 @@ function EditGraderDrawer({
     if (grader) {
       setConfig(grader.config as AnyGraderConfig)
       setName(grader.name)
+      setGating(grader.gating ?? false)
+      setPassThreshold(grader.pass_threshold ?? 8)
       setErrors({})
     }
   }, [grader])
@@ -359,7 +371,7 @@ function EditGraderDrawer({
     if (Object.keys(errs).length > 0) return
     setSubmitting(true)
     try {
-      const updated = await api.updateGrader(grader.id, { name: name.trim() || grader.name, config })
+      const updated = await api.updateGrader(grader.id, { name: name.trim() || grader.name, config, gating, pass_threshold: passThreshold })
       toast.success('Grader updated', updated.name)
       onSaved(updated)
     } catch (e) {
@@ -396,6 +408,8 @@ function EditGraderDrawer({
     >
       <div className="flex flex-col gap-3.5">
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <Switch label="Gating — require this grader to pass" checked={gating} onChange={setGating} />
+        {gating && grader.type === 'llm_judge' && <Input label="Pass threshold (0–10)" type="number" min={0} max={10} step={0.1} value={passThreshold} onChange={(e) => setPassThreshold(Number(e.target.value))} mono />}
         <GraderConfigFields type={grader.type} config={config} onChange={setConfig} errors={errors} />
       </div>
     </Drawer>

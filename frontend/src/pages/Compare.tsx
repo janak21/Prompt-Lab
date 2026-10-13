@@ -129,7 +129,8 @@ export function ComparePage() {
             </span>
           ),
         },
-        { key: 'winner', header: 'Outcome', align: 'right', sortValue: (r) => r.winner, render: (r) => <OutcomePill outcome={r.winner} /> },
+        { key: 'gates', header: 'Pass A / B', render: (r) => (r.a?.passed == null ? '—' : r.a.passed ? 'Pass' : 'Fail') + ' / ' + (r.b?.passed == null ? '—' : r.b.passed ? 'Pass' : 'Fail') },
+        { key: 'winner', header: 'Score outcome', align: 'right', sortValue: (r) => r.winner, render: (r) => <OutcomePill outcome={r.winner} /> },
       ]
     : []
 
@@ -190,7 +191,8 @@ export function ComparePage() {
 
       {result && !loading && (
         <>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
+            <MetricTile label="Pass rate delta" value={result.deltas.pass_rate != null ? (result.deltas.pass_rate * 100).toFixed(1) + ' pp' : '—'} sub={'A ' + (result.a.stats.pass_rate != null ? (result.a.stats.pass_rate * 100).toFixed(1) + '%' : '—') + ' · B ' + (result.b.stats.pass_rate != null ? (result.b.stats.pass_rate * 100).toFixed(1) + '%' : '—')} />
             <MetricTile
               label="Avg score delta"
               value={

@@ -58,6 +58,8 @@ def _grader_response(row: dict[str, Any]) -> Grader:
         config=row["config"],
         enabled=row["enabled"],
         position=row["position"],
+        gating=row["gating"],
+        pass_threshold=row["pass_threshold"],
     )
 
 
@@ -111,6 +113,8 @@ def create_grader(prompt_id: int, body: dict[str, Any]) -> Grader:
         weight=validated.weight,
         enabled=validated.enabled,
         position=validated.position,
+        gating=validated.gating,
+        pass_threshold=validated.pass_threshold,
     )
     return _grader_response(row)
 
@@ -142,6 +146,8 @@ def patch_grader(grader_id: int, body: GraderPatch) -> Grader:
         config=validated_config,
         enabled=body.enabled,
         position=body.position,
+        gating=body.gating,
+        pass_threshold=body.pass_threshold,
     )
     return _grader_response(row)  # type: ignore[arg-type]
 

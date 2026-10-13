@@ -68,6 +68,23 @@ def compute_final_score(grades: list[dict[str, Any]]) -> float | None:
     return max(0.0, min(10.0, numerator / denominator))
 
 
+def compute_passed(grades: list[dict[str, Any]]) -> bool | None:
+    """Evaluate gates independently of weights; an unscored gate is inconclusive.
+
+    Deterministic graders require every constraint (score 10); llm_judge uses its
+    snapshotted threshold. No gates means a successfully executed case passes.
+    """
+    gates = [g for g in grades if (g.get("details") or {}).get("_gating", False)]
+    for grade in gates:
+        details = grade.get("details") or {}
+        threshold = details.get("_pass_threshold", 8.0) if grade["grader_type"] == "llm_judge" else 10.0
+        if _grade_status(grade) == _SCORED_STATUS and grade["score"] < threshold:
+            return False
+    if any(_grade_status(g) != _SCORED_STATUS for g in gates):
+        return None
+    return True
+
+
 def _bucket_index(score: float) -> int:
     clamped = max(0.0, min(10.0, score))
     return min(9, int(clamped))
@@ -140,6 +157,7 @@ def build_run_stats(run_cases: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "avg_score": avg_score,
+        "pass_rate": sum(bool(c.get("passed", c.get("status") == "completed")) for c in run_cases) / total if total else None,
         "total_cost": total_cost,
         "total_latency_ms": total_latency_ms,
         "total": total,

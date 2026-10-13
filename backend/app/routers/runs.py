@@ -104,6 +104,7 @@ def _build_run_summary(run: dict[str, Any]) -> RunSummary:
         temperature=run["temperature"],
         status=run["status"],
         avg_score=run["avg_score"],
+        pass_rate=build_run_stats(cases)["pass_rate"],
         total_cost=run["total_cost"],
         total=len(cases),
         completed=completed,
@@ -144,6 +145,9 @@ def _case_to_pydantic(rc: dict[str, Any]) -> RunCase:
         output_tokens=rc.get("output_tokens"),
         cost=rc.get("cost"),
         final_score=rc.get("final_score"),
+        passed=rc.get("passed"),
+        transcript=rc.get("transcript", []),
+        tool_calls=rc.get("tool_calls", []),
         status=rc["status"],
         error=rc.get("error"),
         grades=[
@@ -164,6 +168,7 @@ def _case_to_pydantic(rc: dict[str, Any]) -> RunCase:
 def _stats_to_pydantic(stats: dict[str, Any]) -> RunStats:
     return RunStats(
         avg_score=stats["avg_score"],
+        pass_rate=stats["pass_rate"],
         total_cost=stats["total_cost"],
         total_latency_ms=stats["total_latency_ms"],
         total=stats["total"],
@@ -175,20 +180,8 @@ def _stats_to_pydantic(stats: dict[str, Any]) -> RunStats:
     )
 
 
-# --------------------------------------------------------------------------
-# POST /api/runs
-# --------------------------------------------------------------------------
-
-
-@router.post("/runs", status_code=202, response_model=RunCreateResponse)
-async def create_run(
-    body: RunCreate,
-    background_tasks: BackgroundTasks,
-    llm: LLMClient = Depends(get_llm_client),
-) -> RunCreateResponse:
-    """Launch a new evaluation run. Execution happens in a background task; the
-    client is expected to immediately open the SSE stream at
-    ``GET /api/runs/{id}/events`` to watch progress."""
+def prepare_run(body: RunCreate) -> dict[str, Any]:
+    """Validate launch settings and snapshot graders for both HTTP and the CLI."""
     prompt_version = models.get_prompt_version(body.prompt_version_id)
     if prompt_version is None:
         raise HTTPException(status_code=404, detail=f"Prompt version {body.prompt_version_id} not found.")
@@ -225,7 +218,7 @@ async def create_run(
 
     graders = [g for g in models.list_graders(prompt_version["prompt_id"]) if g["enabled"]]
     grader_snapshot = [
-        {"name": g["name"], "type": g["type"], "weight": g["weight"], "config": g["config"], "enabled": True}
+        {"name": g["name"], "type": g["type"], "weight": g["weight"], "config": g["config"], "enabled": True, "gating": g["gating"], "pass_threshold": g["pass_threshold"]}
         for g in graders
     ]
 
@@ -239,7 +232,27 @@ async def create_run(
         concurrency=concurrency,
         grader_snapshot=grader_snapshot,
         status="pending",
+        tools_snapshot=dataset["tools"],
     )
+
+    return run
+
+
+# --------------------------------------------------------------------------
+# POST /api/runs
+# --------------------------------------------------------------------------
+
+
+@router.post("/runs", status_code=202, response_model=RunCreateResponse)
+async def create_run(
+    body: RunCreate,
+    background_tasks: BackgroundTasks,
+    llm: LLMClient = Depends(get_llm_client),
+) -> RunCreateResponse:
+    """Launch a new evaluation run. Execution happens in a background task; the
+    client is expected to immediately open the SSE stream at
+    ``GET /api/runs/{id}/events`` to watch progress."""
+    run = prepare_run(body)
 
     background_tasks.add_task(runner.run_evaluation, run["id"], llm)
 
@@ -330,7 +343,7 @@ def compare_runs(a: int, b: int) -> RunCompareResponse:
     return RunCompareResponse(
         a=CompareSideResponse(run=_build_run_summary(run_a), stats=_stats_to_pydantic(stats_a)),
         b=CompareSideResponse(run=_build_run_summary(run_b), stats=_stats_to_pydantic(stats_b)),
-        deltas=CompareDeltas(avg_score=avg_delta, total_cost=cost_delta, by_grader=by_grader_delta, by_category=by_category_delta),
+        deltas=CompareDeltas(pass_rate=(stats_a["pass_rate"] - stats_b["pass_rate"]) if stats_a["pass_rate"] is not None and stats_b["pass_rate"] is not None else None, avg_score=avg_delta, total_cost=cost_delta, by_grader=by_grader_delta, by_category=by_category_delta),
         cases=compare_cases,
         wins=CompareWins(**wins),
     )
@@ -390,6 +403,7 @@ def _terminal_event_for_run(run: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     return "run_completed", {
         "run_id": run["id"],
         "avg_score": run.get("avg_score"),
+        "pass_rate": build_run_stats(cases)["pass_rate"],
         "total_cost": run.get("total_cost") or 0.0,
         "completed": completed,
         "failed": failed,

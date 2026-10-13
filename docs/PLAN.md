@@ -14,7 +14,7 @@ below makes that loop persistent, concurrent, configurable, and visual.
 
 | Decision | Choice |
 |---|---|
-| Location | `Prompt Evaluation/promptlab/` |
+| Location | Repository root (janak21/Prompt-Lab) |
 | Backend | FastAPI + SQLite, `uv`-managed, Python 3.13 |
 | Frontend | Vite + React + TypeScript + Tailwind, built to `backend/app/static/`, served by FastAPI |
 | Startup | `./run.sh` -> builds frontend if stale, starts uvicorn on `:8000`, opens browser |

@@ -123,6 +123,7 @@ export function CaseTable({
                 {v}
               </th>
             ))}
+            <th className="border-b border-[var(--border-subtle)] px-3 py-2 font-medium text-[var(--text-tertiary)]">Conversation</th>
             <th className="border-b border-[var(--border-subtle)] px-3 py-2 font-medium text-[var(--text-tertiary)]">Solution criteria</th>
             <th className="border-b border-[var(--border-subtle)] px-3 py-2 font-medium text-[var(--text-tertiary)]">Category</th>
             <th className="border-b border-[var(--border-subtle)] px-3 py-2 font-medium text-[var(--text-tertiary)]">Format</th>
@@ -140,6 +141,17 @@ export function CaseTable({
                   />
                 </td>
               ))}
+              <td className="px-3 py-1.5">
+                <EditableCell value={JSON.stringify(c.conversation ?? [])} onCommit={(value) => {
+                  try {
+                    const turns = JSON.parse(value)
+                    if (!Array.isArray(turns) || turns.some((t) => typeof t !== 'string') || turns.length > 20) throw new Error()
+                    commit(c.id, { conversation: turns })
+                  } catch {
+                    toast.error('Invalid conversation', 'Use a JSON array of up to 20 user-turn strings.')
+                  }
+                }} />
+              </td>
               <td className="px-3 py-1.5">
                 <EditableCell
                   value={c.solution_criteria ?? ''}

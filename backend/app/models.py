@@ -151,13 +151,21 @@ def latest_prompt_version(prompt_id: int) -> dict[str, Any] | None:
 # --------------------------------------------------------------------------
 
 
-def create_dataset(name: str, *, description: str | None = None, source: str = "manual") -> dict[str, Any]:
+def _decode_dataset(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    row = dict(row)
+    row["tools"] = db.loads(row.pop("tools_json"))
+    return row
+
+
+def create_dataset(name: str, *, description: str | None = None, source: str = "manual", tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Insert a new ``dataset`` row. ``source`` is one of generated|manual|imported."""
     created_at = utcnow_iso()
     with db.connection(write=True) as conn:
         cur = conn.execute(
-            "INSERT INTO dataset (name, description, source, created_at) VALUES (?, ?, ?, ?)",
-            (name, description, source, created_at),
+            "INSERT INTO dataset (name, description, source, created_at, tools_json) VALUES (?, ?, ?, ?, ?)",
+            (name, description, source, created_at, db.dumps(tools or [])),
         )
         new_id = cur.lastrowid
     return get_dataset(new_id)  # type: ignore[arg-type,return-value]
@@ -167,17 +175,17 @@ def get_dataset(dataset_id: int) -> dict[str, Any] | None:
     """Fetch a single ``dataset`` row by id, or None."""
     with db.connection() as conn:
         row = conn.execute("SELECT * FROM dataset WHERE id = ?", (dataset_id,)).fetchone()
-        return db.row_to_dict(row)
+        return _decode_dataset(row)
 
 
 def list_datasets() -> list[dict[str, Any]]:
     """List all datasets, newest first."""
     with db.connection() as conn:
         rows = conn.execute("SELECT * FROM dataset ORDER BY id DESC").fetchall()
-        return db.rows_to_dicts(rows)
+        return [_decode_dataset(row) for row in rows]
 
 
-def update_dataset(dataset_id: int, *, name: str | None = None, description: str | None = None) -> dict[str, Any] | None:
+def update_dataset(dataset_id: int, *, name: str | None = None, description: str | None = None, tools: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """Patch ``name``/``description`` on a dataset."""
     fields: list[str] = []
     values: list[Any] = []
@@ -187,6 +195,9 @@ def update_dataset(dataset_id: int, *, name: str | None = None, description: str
     if description is not None:
         fields.append("description = ?")
         values.append(description)
+    if tools is not None:
+        fields.append("tools_json = ?")
+        values.append(db.dumps(tools))
     if not fields:
         return get_dataset(dataset_id)
     values.append(dataset_id)
@@ -211,6 +222,7 @@ def _decode_test_case(row: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     row = dict(row)
     row["inputs"] = db.loads(row.pop("inputs_json"))
+    row["conversation"] = db.loads(row.pop("conversation_json"))
     return row
 
 
@@ -221,15 +233,16 @@ def create_test_case(
     solution_criteria: str | None = None,
     category: str | None = None,
     expected_format: str | None = None,
+    conversation: list[str] | None = None,
 ) -> dict[str, Any]:
     """Insert a new ``test_case`` row. ``inputs`` is stored JSON-encoded."""
     created_at = utcnow_iso()
     with db.connection(write=True) as conn:
         cur = conn.execute(
             """INSERT INTO test_case
-               (dataset_id, inputs_json, solution_criteria, category, expected_format, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (dataset_id, db.dumps(inputs), solution_criteria, category, expected_format, created_at),
+               (dataset_id, inputs_json, solution_criteria, category, expected_format, created_at, conversation_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (dataset_id, db.dumps(inputs), solution_criteria, category, expected_format, created_at, db.dumps(conversation or [])),
         )
         new_id = cur.lastrowid
     return get_test_case(new_id)  # type: ignore[arg-type,return-value]
@@ -258,6 +271,7 @@ def update_test_case(
     solution_criteria: str | None = None,
     category: str | None = None,
     expected_format: str | None = None,
+    conversation: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Patch any subset of a test case's fields."""
     fields: list[str] = []
@@ -274,6 +288,9 @@ def update_test_case(
     if expected_format is not None:
         fields.append("expected_format = ?")
         values.append(expected_format)
+    if conversation is not None:
+        fields.append("conversation_json = ?")
+        values.append(db.dumps(conversation))
     if not fields:
         return get_test_case(test_case_id)
     values.append(test_case_id)
@@ -299,6 +316,7 @@ def _decode_grader(row: dict[str, Any] | None) -> dict[str, Any] | None:
     row = dict(row)
     row["config"] = db.loads(row.pop("config_json"))
     row["enabled"] = bool(row["enabled"])
+    row["gating"] = bool(row["gating"])
     return row
 
 
@@ -311,13 +329,15 @@ def create_grader(
     weight: float = 1.0,
     enabled: bool = True,
     position: int = 0,
+    gating: bool = False,
+    pass_threshold: float = 8.0,
 ) -> dict[str, Any]:
     """Insert a new ``grader`` row for a prompt."""
     with db.connection(write=True) as conn:
         cur = conn.execute(
-            """INSERT INTO grader (prompt_id, type, name, weight, config_json, enabled, position)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (prompt_id, type, name, weight, db.dumps(config), int(enabled), position),
+            """INSERT INTO grader (prompt_id, type, name, weight, config_json, enabled, position, gating, pass_threshold)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (prompt_id, type, name, weight, db.dumps(config), int(enabled), position, int(gating), pass_threshold),
         )
         new_id = cur.lastrowid
     return get_grader(new_id)  # type: ignore[arg-type,return-value]
@@ -347,6 +367,8 @@ def update_grader(
     config: dict[str, Any] | None = None,
     enabled: bool | None = None,
     position: int | None = None,
+    gating: bool | None = None,
+    pass_threshold: float | None = None,
 ) -> dict[str, Any] | None:
     """Patch any subset of a grader's mutable fields."""
     fields: list[str] = []
@@ -366,6 +388,12 @@ def update_grader(
     if position is not None:
         fields.append("position = ?")
         values.append(position)
+    if gating is not None:
+        fields.append("gating = ?")
+        values.append(int(gating))
+    if pass_threshold is not None:
+        fields.append("pass_threshold = ?")
+        values.append(pass_threshold)
     if not fields:
         return get_grader(grader_id)
     values.append(grader_id)
@@ -390,6 +418,7 @@ def _decode_run(row: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     row = dict(row)
     row["grader_snapshot"] = db.loads(row.pop("grader_snapshot_json"))
+    row["tools_snapshot"] = db.loads(row.pop("tools_snapshot_json"))
     return row
 
 
@@ -404,6 +433,7 @@ def create_run(
     concurrency: int,
     grader_snapshot: list[dict[str, Any]],
     status: str = "pending",
+    tools_snapshot: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Insert a new ``run`` row. ``status`` is one of pending|running|completed|failed|cancelled."""
     created_at = utcnow_iso()
@@ -412,8 +442,8 @@ def create_run(
             """INSERT INTO run
                (prompt_version_id, dataset_id, model, temperature, max_tokens, judge_model,
                 concurrency, grader_snapshot_json, status, started_at, finished_at, avg_score,
-                total_cost, error, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)""",
+                total_cost, error, created_at, tools_snapshot_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)""",
             (
                 prompt_version_id,
                 dataset_id,
@@ -425,6 +455,7 @@ def create_run(
                 db.dumps(grader_snapshot),
                 status,
                 created_at,
+                db.dumps(tools_snapshot or []),
             ),
         )
         new_id = cur.lastrowid
@@ -505,22 +536,36 @@ def create_run_case(
     return get_run_case(new_id)  # type: ignore[arg-type,return-value]
 
 
+def _decode_run_case(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    row = dict(row)
+    for name in ("transcript", "tool_calls"):
+        row[name] = db.loads(row.pop(name + "_json"))
+    if row["passed"] is not None:
+        row["passed"] = bool(row["passed"])
+    return row
+
+
 def get_run_case(run_case_id: int) -> dict[str, Any] | None:
     """Fetch a single ``run_case`` row by id, or None."""
     with db.connection() as conn:
         row = conn.execute("SELECT * FROM run_case WHERE id = ?", (run_case_id,)).fetchone()
-        return db.row_to_dict(row)
+        return _decode_run_case(row)
 
 
 def list_run_cases(run_id: int) -> list[dict[str, Any]]:
     """List all cases for a run, ordered by ``idx``."""
     with db.connection() as conn:
         rows = conn.execute("SELECT * FROM run_case WHERE run_id = ? ORDER BY idx ASC", (run_id,)).fetchall()
-        return db.rows_to_dicts(rows)
+        return [_decode_run_case(row) for row in rows]
 
 
 def update_run_case(run_case_id: int, **fields: Any) -> dict[str, Any] | None:
     """Patch arbitrary columns on a run_case (output, latency_ms, tokens, cost, status, ...)."""
+    for name in ("transcript", "tool_calls"):
+        if name in fields:
+            fields[name + "_json"] = db.dumps(fields.pop(name))
     if not fields:
         return get_run_case(run_case_id)
     set_clause = ", ".join(f"{k} = ?" for k in fields)

@@ -70,6 +70,7 @@ def _dataset_response(row: dict[str, Any]) -> Dataset:
         created_at=row["created_at"],
         case_count=len(cases),
         variables=variables,
+        tools=row["tools"],
     )
 
 
@@ -78,6 +79,7 @@ def _case_response(row: dict[str, Any]) -> TestCase:
         id=row["id"],
         dataset_id=row["dataset_id"],
         inputs=row["inputs"],
+        conversation=row["conversation"],
         solution_criteria=row["solution_criteria"],
         category=row["category"],
         expected_format=row["expected_format"],
@@ -113,7 +115,7 @@ def list_datasets() -> list[Dataset]:
 @router.post("/api/datasets", response_model=Dataset, status_code=201)
 def create_dataset(body: DatasetCreate) -> Dataset:
     """Create an empty, manually-authored dataset."""
-    row = models.create_dataset(body.name, description=body.description, source="manual")
+    row = models.create_dataset(body.name, description=body.description, source="manual", tools=[t.model_dump(mode="json") for t in body.tools])
     return _dataset_response(row)
 
 
@@ -129,7 +131,7 @@ def get_dataset(dataset_id: int) -> DatasetDetailResponse:
 def patch_dataset(dataset_id: int, body: DatasetPatch) -> Dataset:
     """Patch a dataset's ``name``/``description``."""
     _get_dataset_or_404(dataset_id)
-    row = models.update_dataset(dataset_id, name=body.name, description=body.description)
+    row = models.update_dataset(dataset_id, name=body.name, description=body.description, tools=[t.model_dump(mode="json") for t in body.tools] if body.tools is not None else None)
     return _dataset_response(row)  # type: ignore[arg-type]
 
 
@@ -155,6 +157,7 @@ def create_case(dataset_id: int, body: TestCaseCreate) -> TestCase:
         solution_criteria=body.solution_criteria,
         category=body.category,
         expected_format=body.expected_format,
+        conversation=body.conversation,
     )
     return _case_response(row)
 
@@ -169,6 +172,7 @@ def patch_case(case_id: int, body: TestCasePatch) -> TestCase:
         solution_criteria=body.solution_criteria,
         category=body.category,
         expected_format=body.expected_format,
+        conversation=body.conversation,
     )
     return _case_response(row)  # type: ignore[arg-type]
 

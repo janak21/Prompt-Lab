@@ -56,6 +56,7 @@ class GradeContext:
     cost: float | None = None
     output_tokens: int | None = None
     input_tokens: int | None = None
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass

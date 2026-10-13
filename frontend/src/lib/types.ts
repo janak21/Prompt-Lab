@@ -15,7 +15,7 @@ export interface ValidationIssue {
 export type ErrorDetail = string | ValidationIssue[]
 
 
-export type GraderType = 'llm_judge' | 'code_syntax' | 'string_match' | 'json_schema' | 'budget'
+export type GraderType = 'llm_judge' | 'code_syntax' | 'string_match' | 'json_schema' | 'budget' | 'tool_calls'
 
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type RunCaseStatus = 'pending' | 'running' | 'completed' | 'failed'
@@ -94,6 +94,7 @@ export type GraderConfig =
   | GraderConfigStringMatch
   | GraderConfigJsonSchema
   | GraderConfigBudget
+  | GraderConfigToolCalls
   | Record<string, unknown>
 
 export interface Grader {
@@ -105,9 +106,25 @@ export interface Grader {
   config: GraderConfig
   enabled: boolean
   position: number
+  gating?: boolean
+  pass_threshold?: number
+}
+
+export interface MockTool {
+  name: string
+  description?: string
+  input_schema: Record<string, unknown>
+  response?: unknown
+}
+
+export interface GraderConfigToolCalls {
+  tool: string
+  mode: 'never_called' | 'called_with_arguments'
+  arguments?: Record<string, unknown>
 }
 
 export interface Dataset {
+  tools?: MockTool[]
   id: number
   name: string
   description: string | null
@@ -118,6 +135,7 @@ export interface Dataset {
 }
 
 export interface TestCase {
+  conversation?: string[]
   id: number
   dataset_id: number
   inputs: Record<string, string>
@@ -137,6 +155,8 @@ export interface Grade {
 }
 
 export interface RunCase {
+  transcript?: Array<{ role: string; content: unknown }>
+  tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown>; turn: number; response?: unknown; error?: string }>
   id: number
   run_id: number
   test_case_id: number
@@ -147,6 +167,7 @@ export interface RunCase {
   input_tokens: number | null
   output_tokens: number | null
   cost: number | null
+  passed?: boolean | null
   final_score: number | null
   status: RunCaseStatus
   error: string | null
@@ -166,6 +187,7 @@ export interface RunSummary {
   judge_model: string
   temperature: number
   status: RunStatus
+  pass_rate?: number | null
   avg_score: number | null
   total_cost: number | null
   total: number
@@ -178,6 +200,7 @@ export interface RunSummary {
 }
 
 export interface RunStats {
+  pass_rate?: number | null
   avg_score: number | null
   total_cost: number
   total_latency_ms: number
@@ -265,6 +288,8 @@ export interface CreateGraderBody {
   config: GraderConfig
   enabled?: boolean
   position?: number
+  gating?: boolean
+  pass_threshold?: number
 }
 export interface UpdateGraderBody {
   name?: string
@@ -272,6 +297,8 @@ export interface UpdateGraderBody {
   config?: GraderConfig
   enabled?: boolean
   position?: number
+  gating?: boolean
+  pass_threshold?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +306,7 @@ export interface UpdateGraderBody {
 // ---------------------------------------------------------------------------
 
 export interface CreateDatasetBody {
+  tools?: MockTool[]
   name: string
   description?: string
 }
@@ -287,10 +315,12 @@ export interface DatasetDetailResponse {
   cases: TestCase[]
 }
 export interface UpdateDatasetBody {
+  tools?: MockTool[]
   name?: string
   description?: string
 }
 export interface CreateCaseBody {
+  conversation?: string[]
   inputs: Record<string, string>
   solution_criteria?: string
   category?: string
@@ -363,6 +393,7 @@ export interface RunCompareResponse {
   b: { run: RunSummary; stats: RunStats }
   deltas: {
     avg_score: number
+    pass_rate?: number | null
     total_cost: number
     by_grader: Record<string, number>
     by_category: Record<string, number>
@@ -391,9 +422,11 @@ export interface SseCaseStarted {
   idx: number
 }
 export interface SseCaseCompleted {
+  error?: string | null
   run_case_id: number
   test_case_id: number
   idx: number
+  passed?: boolean | null
   final_score: number | null
   latency_ms: number
   cost: number
@@ -414,6 +447,7 @@ export interface SseProgress {
 }
 export interface SseRunCompleted {
   run_id: number
+  pass_rate?: number | null
   avg_score: number | null
   total_cost: number
   completed: number
